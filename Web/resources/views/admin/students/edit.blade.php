@@ -108,15 +108,31 @@
                                        id="nis" name="nis" value="{{ old('nis', $student->student->nis ?? '') }}" placeholder="Nomor induk lokal">
                             </div>
                             <div class="col-md-6">
-                                <label for="grade" class="form-label text-dark fw-semibold small">
-                                    Kelas / Tingkatan <span class="text-danger">*</span>
+                                @php($studentRecord = $student->student)
+                                @php($rombelRequired = ! $studentRecord || $studentRecord->isActive())
+                                <label for="classroom_id" class="form-label text-dark fw-semibold small">
+                                    Rombel @if($rombelRequired)<span class="text-danger">*</span>@endif
                                 </label>
-                                <select class="form-select @error('grade') is-invalid @enderror" id="grade" name="grade" required>
-                                    <option value="">-- Pilih Kelas --</option>
-                                    @foreach(config('student.grades') as $grade)
-                                        <option value="{{ $grade }}" @selected(old('grade', $student->student->grade ?? '') === $grade)>{{ $grade }}</option>
+                                <select class="form-select @error('classroom_id') is-invalid @enderror"
+                                        id="classroom_id" name="classroom_id"
+                                        @if($rombelRequired) required @endif
+                                        {{ $classrooms->isEmpty() ? 'disabled' : '' }}>
+                                    <option value="">-- Pilih Rombel --</option>
+                                    @foreach($classrooms as $classroom)
+                                        <option value="{{ $classroom->id }}" @selected((string) old('classroom_id', $studentRecord->classroom_id ?? '') === (string) $classroom->id)>
+                                            {{ $classroom->name }} (sisa {{ $classroom->maxStudents() - $classroom->active_students_count }} kursi)
+                                        </option>
                                     @endforeach
                                 </select>
+                                @if(! $rombelRequired)
+                                    <div class="form-text text-muted small mt-1">
+                                        Siswa ini berstatus non-aktif (alumni/mutasi), jadi rombel boleh dikosongkan.
+                                    </div>
+                                @elseif($classrooms->isEmpty())
+                                    <div class="form-text text-danger mt-1">
+                                        Belum ada rombel aktif dengan kursi tersisa. Buat rombel dulu di menu Rombel.
+                                    </div>
+                                @endif
                             </div>
                             <div class="col-md-6">
                                 <label for="gender" class="form-label text-dark fw-semibold small">Jenis Kelamin</label>

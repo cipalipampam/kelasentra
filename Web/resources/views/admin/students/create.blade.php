@@ -113,15 +113,28 @@
                                        id="nis" name="nis" value="{{ old('nis') }}" placeholder="ID lokal sekolah">
                             </div>
                             <div class="col-md-6">
-                                <label for="grade" class="form-label text-dark fw-semibold small">
-                                    Kelas / Tingkatan <span class="text-danger">*</span>
+                                <label for="classroom_id" class="form-label text-dark fw-semibold small">
+                                    Rombel <span class="text-danger">*</span>
                                 </label>
-                                <select class="form-select @error('grade') is-invalid @enderror" id="grade" name="grade" required>
-                                    <option value="">-- Pilih Kelas Siswa --</option>
-                                    @foreach(config('student.grades') as $grade)
-                                        <option value="{{ $grade }}" @selected(old('grade') === $grade)>{{ $grade }}</option>
+                                <select class="form-select @error('classroom_id') is-invalid @enderror"
+                                        id="classroom_id" name="classroom_id" required
+                                        {{ $classrooms->isEmpty() ? 'disabled' : '' }}>
+                                    <option value="">-- Pilih Rombel --</option>
+                                    @foreach($classrooms as $classroom)
+                                        <option value="{{ $classroom->id }}" @selected((string) old('classroom_id') === (string) $classroom->id)>
+                                            {{ $classroom->name }} (sisa {{ $classroom->maxStudents() - $classroom->active_students_count }} kursi)
+                                        </option>
                                     @endforeach
                                 </select>
+                                @if($classrooms->isEmpty())
+                                    <div class="form-text text-danger mt-1">
+                                        Belum ada rombel aktif dengan kursi tersisa. Buat rombel dulu di menu Rombel.
+                                    </div>
+                                @else
+                                    <div class="form-text text-muted small mt-1">
+                                        Rombel menentukan kelas dan tahun ajaran siswa, sekaligus dipakai untuk jadwal serta presensi.
+                                    </div>
+                                @endif
                             </div>
                             <div class="col-md-6">
                                 <label for="gender" class="form-label text-dark fw-semibold small">Jenis Kelamin</label>
@@ -200,7 +213,8 @@
                 {{-- Submit Action Card --}}
                 <div class="card border-0 shadow-sm position-sticky" style="top: 2rem;">
                     <div class="card-body p-4">
-                        <button type="submit" class="btn btn-primary w-100 py-2.5 fw-bold shadow-xs mb-3">
+                        <button type="submit" class="btn btn-primary w-100 py-2.5 fw-bold shadow-xs mb-3"
+                                {{ $classrooms->isEmpty() ? 'disabled' : '' }}>
                             <i class="bi bi-check2-circle me-1.5"></i>Daftarkan Siswa
                         </button>
                         <a href="{{ route('admin.students.index') }}" class="btn btn-outline-secondary w-100 py-2" style="font-size: 0.85rem;">

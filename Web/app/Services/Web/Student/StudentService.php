@@ -4,6 +4,7 @@ namespace App\Services\Web\Student;
 
 use App\Events\DirectoryChanged;
 use App\Events\SessionInvalidated;
+use App\Models\Classroom;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -25,10 +26,14 @@ class StudentService
 
         $user->assignRole('siswa');
 
+        // Rombel wajib untuk siswa baru; grade hanya cerminan nama rombel.
+        $classroom = Classroom::findOrFail($data['classroom_id']);
+
         $user->student()->create([
+            'classroom_id' => $classroom->id,
+            'grade' => $classroom->name,
             'nis' => $data['nis'] ?? null,
             'nisn' => $data['nisn'] ?? null,
-            'grade' => $data['grade'] ?? null,
             'gender' => $data['gender'] ?? null,
             'place_of_birth' => $data['place_of_birth'] ?? null,
             'date_of_birth' => $data['date_of_birth'] ?? null,
@@ -61,20 +66,31 @@ class StudentService
             $fotoPath = $data['profile_picture']->store('pas_foto', 'public');
         }
 
+        // Rombel opsional saat mengedit agar data alumni tidak dipaksa masuk rombel.
+        $classroom = filled($data['classroom_id'] ?? null)
+            ? Classroom::findOrFail($data['classroom_id'])
+            : null;
+
+        $attributes = [
+            'nis' => $data['nis'] ?? null,
+            'nisn' => $data['nisn'] ?? null,
+            'gender' => $data['gender'] ?? null,
+            'place_of_birth' => $data['place_of_birth'] ?? null,
+            'date_of_birth' => $data['date_of_birth'] ?? null,
+            'religion' => $data['religion'] ?? null,
+            'address' => $data['address'] ?? null,
+            'phone_number' => $data['phone_number'] ?? null,
+            'profile_picture' => $fotoPath,
+        ];
+
+        if ($classroom) {
+            $attributes['classroom_id'] = $classroom->id;
+            $attributes['grade'] = $classroom->name;
+        }
+
         $user->student()->updateOrCreate(
             ['user_id' => $user->id],
-            [
-                'nis' => $data['nis'] ?? null,
-                'nisn' => $data['nisn'] ?? null,
-                'grade' => $data['grade'] ?? null,
-                'gender' => $data['gender'] ?? null,
-                'place_of_birth' => $data['place_of_birth'] ?? null,
-                'date_of_birth' => $data['date_of_birth'] ?? null,
-                'religion' => $data['religion'] ?? null,
-                'address' => $data['address'] ?? null,
-                'phone_number' => $data['phone_number'] ?? null,
-                'profile_picture' => $fotoPath,
-            ]
+            $attributes
         );
 
         event(new DirectoryChanged($user->id, 'siswa', 'updated'));
