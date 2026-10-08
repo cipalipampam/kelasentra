@@ -22,9 +22,9 @@
         <div class="sidebar-header">
             <div class="sidebar-logo-full">
                 <div class="sidebar-logo-icon">PS</div>
-                <div class="d-flex flex-column overflow-hidden">
-                    <span class="fs-6 fw-bold text-white link-text" style="letter-spacing: -0.3px;">Kelasentra</span>
-                    <span class="text-white-50 small link-text" style="font-size: 0.68rem; margin-top: -3px;">Enterprise EdTech</span>
+                <div class="d-flex flex-column overflow-hidden sidebar-logo-text">
+                    <span class="fs-6 fw-bold text-white" style="letter-spacing: -0.3px;">Kelasentra</span>
+                    <span class="text-white-50 small" style="font-size: 0.68rem; margin-top: -3px;">Enterprise EdTech</span>
                 </div>
             </div>
             <button id="toggleSidebar" class="btn p-1 border-0 bg-transparent text-white-50 ms-auto" style="font-size:1.25rem;" title="Toggle sidebar">
@@ -33,7 +33,7 @@
         </div>
 
         <div class="py-3 grow overflow-y-auto">
-            <p class="text-white-50 px-3 mb-2" style="font-size:0.65rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;">Navigasi Utama</p>
+            <p class="sidebar-section-header text-white-50 px-3 mb-2" style="font-size:0.65rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;">Navigasi Utama</p>
             <ul class="nav nav-pills flex-column mb-auto">
                 <li class="nav-item">
                     <a href="{{ route('admin.dashboard') }}"
@@ -100,7 +100,7 @@
                 </li>
             </ul>
 
-            <p class="text-white-50 px-3 mb-2 mt-4" style="font-size:0.65rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;">Konfigurasi</p>
+            <p class="sidebar-section-header text-white-50 px-3 mb-2 mt-4" style="font-size:0.65rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;">Konfigurasi</p>
             <ul class="nav nav-pills flex-column">
                 <li class="nav-item">
                     <a href="{{ route('admin.settings.index') }}"
