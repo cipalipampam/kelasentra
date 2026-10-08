@@ -2,401 +2,313 @@
 
 namespace Database\Seeders;
 
+use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\Student;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
+/**
+ * Seed siswa untuk tahun ajaran aktif, plus alumni lulusan tahun ajaran
+ * terarsip terakhir.
+ *
+ * Model data hanya menyimpan satu `classroom_id` per siswa (bukan riwayat
+ * per tahun), sehingga siswa aktif ditempatkan pada rombel tahun ajaran
+ * aktif dan angkatan yang sudah lulus disimpan sebagai alumni
+ * (academic_status = graduated, tanpa rombel).
+ *
+ * Nama dibangkitkan secara deterministik dari kumpulan nama, sehingga
+ * mengulang seeder menghasilkan data yang sama.
+ */
 class StudentSeeder extends Seeder
 {
+    public const STUDENTS_PER_CLASSROOM = 12;
+
+    private const FIRST_NAME_POOL_SIZE = 24;
+
+    private const MALE_FIRST_NAMES = [
+        'Ahmad', 'Budi', 'Dimas', 'Fajar', 'Rizki', 'Bagas',
+        'Reza', 'Galih', 'Alif', 'Farhan', 'Rizal', 'Kevin',
+        'Bayu', 'Yoga', 'Arif', 'Ilham', 'Naufal', 'Rian',
+        'Satria', 'Wahyu', 'Yusuf', 'Zaki', 'Daffa', 'Bintang',
+    ];
+
+    private const FEMALE_FIRST_NAMES = [
+        'Siti', 'Dewi', 'Nabila', 'Aulia', 'Clarissa', 'Jessica',
+        'Tiara', 'Syifa', 'Annisa', 'Ratna', 'Melati', 'Putri',
+        'Ayu', 'Intan', 'Laras', 'Maya', 'Nadia', 'Rahma',
+        'Salma', 'Tania', 'Vina', 'Wulan', 'Zahra', 'Kirana',
+    ];
+
+    private const LAST_NAMES = [
+        'Pratama', 'Santoso', 'Anggraeni', 'Maulana', 'Azzahra', 'Ramadhan',
+        'Sanjaya', 'Stephanie', 'Pamungkas', 'Tanuwijaya', 'Fahlevi', 'Andini',
+        'Syahputra', 'Maharani', 'Hapsari', 'Rakasiwi', 'Firmansyah', 'Wardani',
+        'Hidayat', 'Wandira', 'Kusuma', 'Permata', 'Wijaya', 'Nugroho',
+        'Saputra', 'Setiawan', 'Lestari', 'Hartono', 'Susanto', 'Wibowo',
+        'Handayani', 'Purnama',
+    ];
+
+    private const CITIES = [
+        'Jakarta', 'Bandung', 'Surabaya', 'Semarang', 'Yogyakarta', 'Medan',
+        'Malang', 'Bogor', 'Depok', 'Bekasi', 'Tangerang', 'Palembang',
+        'Makassar', 'Denpasar', 'Padang', 'Surakarta',
+    ];
+
+    private const STREETS = [
+        'Merdeka', 'Sudirman', 'Diponegoro', 'Gatot Subroto', 'Ahmad Yani',
+        'Pajajaran', 'Cendrawasih', 'Melati', 'Kartini', 'Veteran',
+    ];
+
+    private const RELIGIONS = [
+        'Islam', 'Islam', 'Islam', 'Islam', 'Islam', 'Islam', 'Kristen', 'Katolik',
+    ];
+
+    /**
+     * Akun siswa contoh yang selalu tersedia agar kredensial demo tetap valid.
+     */
+    private const DEMO_STUDENTS = [
+        'X-MIPA 1' => ['name' => 'Ahmad Rizki Pratama', 'email' => 'ahmad.rizki@siswa.sch.id', 'gender' => 'male'],
+        'XI-MIPA 1' => ['name' => 'Dimas Arya Pamungkas', 'email' => 'dimas.arya@siswa.sch.id', 'gender' => 'male'],
+        'XII-MIPA 1' => ['name' => 'Fajar Alfian Pratama', 'email' => 'fajar.alfian@siswa.sch.id', 'gender' => 'male'],
+    ];
+
     public function run(): void
     {
-        $classXMipa1 = Classroom::where('name', 'X-MIPA 1')->first();
-        $classXMipa2 = Classroom::where('name', 'X-MIPA 2')->first();
-        $classXiMipa1 = Classroom::where('name', 'XI-MIPA 1')->first();
-        $classXiiMipa1 = Classroom::where('name', 'XII-MIPA 1')->first();
+        $activeYear = AcademicYear::query()
+            ->where('status', AcademicYear::STATUS_ACTIVE)
+            ->orderByDesc('name')
+            ->first();
 
-        $students = [
-            // ── Kelas X-MIPA 1 (6 siswa aktif) ──────────────────────────────
-            [
-                'name' => 'Ahmad Rizki Pratama',
-                'email' => 'ahmad.rizki@siswa.sch.id',
-                'nis' => '2026001',
-                'nisn' => '0061234501',
-                'classroom_id' => $classXMipa1?->id,
-                'grade' => $classXMipa1?->name ?? 'X-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Jakarta',
-                'date_of_birth' => '2009-03-12',
-                'religion' => 'Islam',
-                'phone' => '081211110001',
-                'address' => 'Jl. Kebon Jeruk No.12, Jakarta Barat',
-            ],
-            [
-                'name' => 'Siti Nurhaliza',
-                'email' => 'siti.nur@siswa.sch.id',
-                'nis' => '2026002',
-                'nisn' => '0061234502',
-                'classroom_id' => $classXMipa1?->id,
-                'grade' => $classXMipa1?->name ?? 'X-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Bandung',
-                'date_of_birth' => '2009-07-20',
-                'religion' => 'Islam',
-                'phone' => '081211110002',
-                'address' => 'Jl. Dago No.55, Bandung',
-            ],
-            [
-                'name' => 'Budi Santoso',
-                'email' => 'budi.santoso@siswa.sch.id',
-                'nis' => '2026003',
-                'nisn' => '0061234503',
-                'classroom_id' => $classXMipa1?->id,
-                'grade' => $classXMipa1?->name ?? 'X-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Surabaya',
-                'date_of_birth' => '2009-01-05',
-                'religion' => 'Islam',
-                'phone' => '081211110003',
-                'address' => 'Jl. Rungkut No.8, Surabaya',
-            ],
-            [
-                'name' => 'Dewi Anggraeni',
-                'email' => 'dewi.ang@siswa.sch.id',
-                'nis' => '2026004',
-                'nisn' => '0061234504',
-                'classroom_id' => $classXMipa1?->id,
-                'grade' => $classXMipa1?->name ?? 'X-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Semarang',
-                'date_of_birth' => '2009-09-17',
-                'religion' => 'Islam',
-                'phone' => '081211110004',
-                'address' => 'Jl. Pemuda No.22, Semarang',
-            ],
-            [
-                'name' => 'Rizal Maulana',
-                'email' => 'rizal.maulana@siswa.sch.id',
-                'nis' => '2026005',
-                'nisn' => '0061234505',
-                'classroom_id' => $classXMipa1?->id,
-                'grade' => $classXMipa1?->name ?? 'X-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Yogyakarta',
-                'date_of_birth' => '2009-05-30',
-                'religion' => 'Islam',
-                'phone' => '081211110005',
-                'address' => 'Jl. Malioboro No.1, Yogyakarta',
-            ],
-            [
-                'name' => 'Nabila Putri Azzahra',
-                'email' => 'nabila.putri@siswa.sch.id',
-                'nis' => '2026006',
-                'nisn' => '0061234506',
-                'classroom_id' => $classXMipa1?->id,
-                'grade' => $classXMipa1?->name ?? 'X-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Bogor',
-                'date_of_birth' => '2009-08-14',
-                'religion' => 'Islam',
-                'phone' => '081211110006',
-                'address' => 'Jl. Pajajaran No.99, Bogor',
-            ],
+        if (! $activeYear) {
+            $this->command->warn('⚠️ Belum ada tahun ajaran aktif. Jalankan AcademicYearSeeder lebih dulu.');
 
-            // ── Kelas X-MIPA 2 (4 siswa aktif) ──────────────────────────────
-            [
-                'name' => 'Farhan Ramadhan',
-                'email' => 'farhan.ramadhan@siswa.sch.id',
-                'nis' => '2026011',
-                'nisn' => '0061234511',
-                'classroom_id' => $classXMipa2?->id,
-                'grade' => $classXMipa2?->name ?? 'X-MIPA 2',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Medan',
-                'date_of_birth' => '2009-04-11',
-                'religion' => 'Islam',
-                'phone' => '081211110011',
-                'address' => 'Jl. Gatot Subroto No.10, Medan',
-            ],
-            [
-                'name' => 'Aulia Zahra',
-                'email' => 'aulia.zahra@siswa.sch.id',
-                'nis' => '2026012',
-                'nisn' => '0061234512',
-                'classroom_id' => $classXMipa2?->id,
-                'grade' => $classXMipa2?->name ?? 'X-MIPA 2',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Padang',
-                'date_of_birth' => '2009-10-05',
-                'religion' => 'Islam',
-                'phone' => '081211110012',
-                'address' => 'Jl. Khatib Sulaiman No.4, Padang',
-            ],
-            [
-                'name' => 'Kevin Sanjaya',
-                'email' => 'kevin.sanjaya@siswa.sch.id',
-                'nis' => '2026013',
-                'nisn' => '0061234513',
-                'classroom_id' => $classXMipa2?->id,
-                'grade' => $classXMipa2?->name ?? 'X-MIPA 2',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Denpasar',
-                'date_of_birth' => '2009-02-18',
-                'religion' => 'Hindu',
-                'phone' => '081211110013',
-                'address' => 'Jl. Teuku Umar No.55, Denpasar',
-            ],
-            [
-                'name' => 'Clarissa Stephanie',
-                'email' => 'clarissa.stephanie@siswa.sch.id',
-                'nis' => '2026014',
-                'nisn' => '0061234514',
-                'classroom_id' => $classXMipa2?->id,
-                'grade' => $classXMipa2?->name ?? 'X-MIPA 2',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Surabaya',
-                'date_of_birth' => '2009-12-01',
-                'religion' => 'Kristen',
-                'phone' => '081211110014',
-                'address' => 'Jl. Mayjen Sungkono No.80, Surabaya',
-            ],
+            return;
+        }
 
-            // ── Kelas XI-MIPA 1 (6 siswa aktif) ─────────────────────────────
-            [
-                'name' => 'Dimas Arya Pamungkas',
-                'email' => 'dimas.arya@siswa.sch.id',
-                'nis' => '2025001',
-                'nisn' => '0051234501',
-                'classroom_id' => $classXiMipa1?->id,
-                'grade' => $classXiMipa1?->name ?? 'XI-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Solo',
-                'date_of_birth' => '2008-01-15',
-                'religion' => 'Islam',
-                'phone' => '081211110021',
-                'address' => 'Jl. Slamet Riyadi No.15, Solo',
-            ],
-            [
-                'name' => 'Jessica Tanuwijaya',
-                'email' => 'jessica.tan@siswa.sch.id',
-                'nis' => '2025002',
-                'nisn' => '0051234502',
-                'classroom_id' => $classXiMipa1?->id,
-                'grade' => $classXiMipa1?->name ?? 'XI-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Jakarta',
-                'date_of_birth' => '2008-06-25',
-                'religion' => 'Buddha',
-                'phone' => '081211110022',
-                'address' => 'Jl. Pluit Raya No.7, Jakarta Utara',
-            ],
-            [
-                'name' => 'Reza Fahlevi',
-                'email' => 'reza.fahlevi@siswa.sch.id',
-                'nis' => '2025003',
-                'nisn' => '0051234503',
-                'classroom_id' => $classXiMipa1?->id,
-                'grade' => $classXiMipa1?->name ?? 'XI-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Malang',
-                'date_of_birth' => '2008-09-08',
-                'religion' => 'Islam',
-                'phone' => '081211110023',
-                'address' => 'Jl. Buring No.3, Malang',
-            ],
-            [
-                'name' => 'Tiara Andini',
-                'email' => 'tiara.andini@siswa.sch.id',
-                'nis' => '2025004',
-                'nisn' => '0051234504',
-                'classroom_id' => $classXiMipa1?->id,
-                'grade' => $classXiMipa1?->name ?? 'XI-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Jember',
-                'date_of_birth' => '2008-11-20',
-                'religion' => 'Islam',
-                'phone' => '081211110024',
-                'address' => 'Jl. Kalimantan No.12, Jember',
-            ],
-            [
-                'name' => 'Alif Ramadhan Syahputra',
-                'email' => 'alif.ramadhan@siswa.sch.id',
-                'nis' => '2025005',
-                'nisn' => '0051234505',
-                'classroom_id' => $classXiMipa1?->id,
-                'grade' => $classXiMipa1?->name ?? 'XI-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Palembang',
-                'date_of_birth' => '2008-04-03',
-                'religion' => 'Islam',
-                'phone' => '081211110025',
-                'address' => 'Jl. Kolonel Atmo No.27, Palembang',
-            ],
-            [
-                'name' => 'Syifa Hadju Maharani',
-                'email' => 'syifa.hadju@siswa.sch.id',
-                'nis' => '2025006',
-                'nisn' => '0051234506',
-                'classroom_id' => $classXiMipa1?->id,
-                'grade' => $classXiMipa1?->name ?? 'XI-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Jakarta',
-                'date_of_birth' => '2008-07-13',
-                'religion' => 'Islam',
-                'phone' => '081211110026',
-                'address' => 'Jl. Tebet Barat No.14, Jakarta Selatan',
-            ],
+        $activeClassrooms = $this->orderedClassrooms($activeYear->name, null);
 
-            // ── Kelas XII-MIPA 1 (4 siswa aktif tingkat akhir) ──────────────
-            [
-                'name' => 'Fajar Alfian Pratama',
-                'email' => 'fajar.alfian@siswa.sch.id',
-                'nis' => '2024001',
-                'nisn' => '0041234501',
-                'classroom_id' => $classXiiMipa1?->id,
-                'grade' => $classXiiMipa1?->name ?? 'XII-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Bandung',
-                'date_of_birth' => '2007-03-07',
-                'religion' => 'Islam',
-                'phone' => '081211110031',
-                'address' => 'Jl. Pasirkaliki No.20, Bandung',
-            ],
-            [
-                'name' => 'Annisa Tri Hapsari',
-                'email' => 'annisa.tri@siswa.sch.id',
-                'nis' => '2024002',
-                'nisn' => '0041234502',
-                'classroom_id' => $classXiiMipa1?->id,
-                'grade' => $classXiiMipa1?->name ?? 'XII-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Semarang',
-                'date_of_birth' => '2007-05-19',
-                'religion' => 'Islam',
-                'phone' => '081211110032',
-                'address' => 'Jl. Pandanaran No.10, Semarang',
-            ],
-            [
-                'name' => 'Galih Rakasiwi',
-                'email' => 'galih.rakasiwi@siswa.sch.id',
-                'nis' => '2024003',
-                'nisn' => '0041234503',
-                'classroom_id' => $classXiiMipa1?->id,
-                'grade' => $classXiiMipa1?->name ?? 'XII-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'male',
-                'place_of_birth' => 'Yogyakarta',
-                'date_of_birth' => '2007-08-22',
-                'religion' => 'Islam',
-                'phone' => '081211110033',
-                'address' => 'Jl. Kaliurang KM 5, Yogyakarta',
-            ],
-            [
-                'name' => 'Ratna Galih Kirana',
-                'email' => 'ratna.galih@siswa.sch.id',
-                'nis' => '2024004',
-                'nisn' => '0041234504',
-                'classroom_id' => $classXiiMipa1?->id,
-                'grade' => $classXiiMipa1?->name ?? 'XII-MIPA 1',
-                'academic_status' => 'active',
-                'gender' => 'female',
-                'place_of_birth' => 'Surakarta',
-                'date_of_birth' => '2007-10-30',
-                'religion' => 'Islam',
-                'phone' => '081211110034',
-                'address' => 'Jl. Veteran No.5, Surakarta',
-            ],
+        if ($activeClassrooms->isEmpty()) {
+            $this->command->warn("⚠️ Rombel tahun ajaran {$activeYear->name} belum ada. Jalankan ClassroomSeeder lebih dulu.");
 
-            // ── Alumni / Lulusan (4 siswa alumni) ────────────────────────────
-            [
-                'name' => 'Bagus Wicaksono (Alumni)',
-                'email' => 'bagus.wicaksono@alumni.sch.id',
-                'nis' => '2023001',
-                'nisn' => '0031234501',
-                'classroom_id' => null,
-                'grade' => 'XII-MIPA 1',
-                'academic_status' => 'graduated',
-                'gender' => 'male',
-                'place_of_birth' => 'Jakarta',
-                'date_of_birth' => '2006-02-10',
-                'religion' => 'Islam',
-                'phone' => '081211110041',
-                'address' => 'Jl. Kemang Raya No.12, Jakarta Selatan',
-            ],
-            [
-                'name' => 'Melati Kusuma Wardani (Alumni)',
-                'email' => 'melati.kusuma@alumni.sch.id',
-                'nis' => '2023002',
-                'nisn' => '0031234502',
-                'classroom_id' => null,
-                'grade' => 'XII-MIPA 1',
-                'academic_status' => 'graduated',
-                'gender' => 'female',
-                'place_of_birth' => 'Bandung',
-                'date_of_birth' => '2006-06-18',
-                'religion' => 'Islam',
-                'phone' => '081211110042',
-                'address' => 'Jl. Setiabudi No.45, Bandung',
-            ],
-            [
-                'name' => 'Rian Hidayat (Alumni)',
-                'email' => 'rian.hidayat@alumni.sch.id',
-                'nis' => '2023003',
-                'nisn' => '0031234503',
-                'classroom_id' => null,
-                'grade' => 'XII-IPS 1',
-                'academic_status' => 'graduated',
-                'gender' => 'male',
-                'place_of_birth' => 'Surabaya',
-                'date_of_birth' => '2006-09-04',
-                'religion' => 'Islam',
-                'phone' => '081211110043',
-                'address' => 'Jl. Darmo No.99, Surabaya',
-            ],
-            [
-                'name' => 'Putri Ayu Wandira (Alumni)',
-                'email' => 'putri.ayu@alumni.sch.id',
-                'nis' => '2023004',
-                'nisn' => '0031234504',
-                'classroom_id' => null,
-                'grade' => 'XII-IPS 1',
-                'academic_status' => 'graduated',
-                'gender' => 'female',
-                'place_of_birth' => 'Malang',
-                'date_of_birth' => '2006-12-25',
-                'religion' => 'Islam',
-                'phone' => '081211110044',
-                'address' => 'Jl. Soekarno Hatta No.10, Malang',
-            ],
+            return;
+        }
+
+        $archivedYear = AcademicYear::query()
+            ->where('status', AcademicYear::STATUS_ARCHIVED)
+            ->orderByDesc('name')
+            ->first();
+
+        $roster = $this->buildRoster($activeYear, $archivedYear, $activeClassrooms);
+
+        $this->pruneStaleStudents($roster);
+
+        $this->persistRoster($roster);
+
+        $activeCount = count(array_filter($roster, fn ($row) => $row['academic_status'] === 'active'));
+        $alumniCount = count($roster) - $activeCount;
+
+        $this->command->info("✅ {$activeCount} siswa aktif di {$activeClassrooms->count()} rombel ({$activeYear->name}) + {$alumniCount} alumni berhasil di-seed.");
+    }
+
+    /**
+     * Susun seluruh daftar siswa aktif maupun alumni.
+     *
+     * @param  Collection<int, Classroom>  $activeClassrooms
+     * @return list<array<string, mixed>>
+     */
+    private function buildRoster(AcademicYear $activeYear, ?AcademicYear $archivedYear, Collection $activeClassrooms): array
+    {
+        $activeStart = (int) substr($activeYear->name, 0, 4);
+        $entryYearByLevel = ['10' => $activeStart, '11' => $activeStart - 1, '12' => $activeStart - 2];
+
+        $roster = [];
+        $usedEmails = [];
+        $nisSequence = [];
+        $phoneSequence = 0;
+        $maleIndex = 0;
+        $femaleIndex = 0;
+
+        foreach ($activeClassrooms as $classroom) {
+            $entryYear = $entryYearByLevel[$classroom->level] ?? $activeStart;
+            $demo = self::DEMO_STUDENTS[$classroom->name] ?? null;
+
+            if ($demo) {
+                $usedEmails[] = $demo['email'];
+                $roster[] = $this->makeRow(
+                    $demo['name'],
+                    $demo['email'],
+                    $demo['gender'],
+                    $classroom,
+                    'active',
+                    $entryYear,
+                    $nisSequence,
+                    $phoneSequence,
+                );
+            }
+
+            $slots = self::STUDENTS_PER_CLASSROOM - ($demo ? 1 : 0);
+
+            for ($i = 0; $i < $slots; $i++) {
+                $isMale = $i % 2 === 0;
+                $generated = $this->nextGeneratedName($isMale, $maleIndex, $femaleIndex, $usedEmails);
+
+                $roster[] = $this->makeRow(
+                    $generated['name'],
+                    $generated['email'],
+                    $isMale ? 'male' : 'female',
+                    $classroom,
+                    'active',
+                    $entryYear,
+                    $nisSequence,
+                    $phoneSequence,
+                );
+            }
+        }
+
+        if ($archivedYear) {
+            $alumniClassrooms = $this->orderedClassrooms($archivedYear->name, '12');
+            $alumniEntryYear = (int) substr($archivedYear->name, 0, 4) - 2;
+
+            foreach ($alumniClassrooms as $classroom) {
+                for ($i = 0; $i < self::STUDENTS_PER_CLASSROOM; $i++) {
+                    $isMale = $i % 2 === 0;
+                    $generated = $this->nextGeneratedName($isMale, $maleIndex, $femaleIndex, $usedEmails, 'alumni.sch.id');
+
+                    $roster[] = $this->makeRow(
+                        $generated['name'],
+                        $generated['email'],
+                        $isMale ? 'male' : 'female',
+                        $classroom,
+                        'graduated',
+                        $alumniEntryYear,
+                        $nisSequence,
+                        $phoneSequence,
+                    );
+                }
+            }
+        }
+
+        return $roster;
+    }
+
+    /**
+     * Rombel pada satu tahun ajaran, diurutkan agar MIPA selalu lebih dulu.
+     *
+     * @return Collection<int, Classroom>
+     */
+    private function orderedClassrooms(string $academicYear, ?string $level): Collection
+    {
+        $majorRank = array_flip(ClassroomSeeder::MAJORS);
+
+        return Classroom::query()
+            ->where('academic_year', $academicYear)
+            ->when($level !== null, fn ($query) => $query->where('level', $level))
+            ->get()
+            ->sortBy(fn (Classroom $classroom) => $classroom->level.'-'.($majorRank[$classroom->major] ?? 99))
+            ->values();
+    }
+
+    /**
+     * @param  array<int, int>  $nisSequence
+     * @return array<string, mixed>
+     */
+    private function makeRow(
+        string $name,
+        string $email,
+        string $gender,
+        Classroom $classroom,
+        string $academicStatus,
+        int $entryYear,
+        array &$nisSequence,
+        int &$phoneSequence,
+    ): array {
+        $sequence = ($nisSequence[$entryYear] ?? 0) + 1;
+        $nisSequence[$entryYear] = $sequence;
+        $phoneSequence++;
+
+        // NIS diberikan saat siswa masuk (kelas X), NISN selalu 10 digit.
+        $nis = $entryYear.str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
+
+        return [
+            'name' => $name,
+            'email' => $email,
+            'classroom_id' => $academicStatus === 'graduated' ? null : $classroom->id,
+            'grade' => $classroom->name,
+            'academic_status' => $academicStatus,
+            'nis' => $nis,
+            'nisn' => '000'.$nis,
+            'gender' => $gender,
+            'place_of_birth' => self::CITIES[$sequence % count(self::CITIES)],
+            'date_of_birth' => sprintf('%04d-%02d-%02d', $entryYear - 15, (($sequence * 3) % 12) + 1, (($sequence * 7) % 27) + 1),
+            'religion' => self::RELIGIONS[$sequence % count(self::RELIGIONS)],
+            'phone' => '0812'.str_pad((string) $phoneSequence, 7, '0', STR_PAD_LEFT),
+            'address' => 'Jl. '.self::STREETS[$sequence % count(self::STREETS)].' No.'.(($sequence % 90) + 1).', '.self::CITIES[($sequence * 5) % count(self::CITIES)],
         ];
+    }
 
-        foreach ($students as $data) {
-            $user = User::updateOrCreate(
-                ['email' => $data['email']],
-                [
-                    'name' => $data['name'],
-                    'password' => Hash::make('password123'),
-                ]
-            );
+    /**
+     * Bangkitkan nama unik dari kumpulan nama, dengan memastikan email belum terpakai.
+     *
+     * @param  list<string>  $usedEmails
+     * @return array{name: string, email: string}
+     */
+    private function nextGeneratedName(bool $isMale, int &$maleIndex, int &$femaleIndex, array &$usedEmails, string $domain = 'siswa.sch.id'): array
+    {
+        $pool = $isMale ? self::MALE_FIRST_NAMES : self::FEMALE_FIRST_NAMES;
+
+        while (true) {
+            $index = $isMale ? $maleIndex++ : $femaleIndex++;
+
+            $first = $pool[$index % self::FIRST_NAME_POOL_SIZE];
+            $last = self::LAST_NAMES[intdiv($index, self::FIRST_NAME_POOL_SIZE) % count(self::LAST_NAMES)];
+            $email = strtolower($first.'.'.$last).'@'.$domain;
+
+            if (! in_array($email, $usedEmails, true)) {
+                $usedEmails[] = $email;
+
+                return ['name' => $first.' '.$last, 'email' => $email];
+            }
+        }
+    }
+
+    /**
+     * Siswa (dan akunnya) yang tidak lagi masuk roster akan dihapus.
+     *
+     * @param  list<array<string, mixed>>  $roster
+     */
+    private function pruneStaleStudents(array $roster): void
+    {
+        $keepEmails = array_column($roster, 'email');
+
+        $stale = User::query()->role('siswa')->whereNotIn('email', $keepEmails)->get();
+
+        foreach ($stale as $user) {
+            $this->command->warn("   ↻ Menghapus siswa lama di luar roster: {$user->email}");
+            $user->tokens()->delete();
+            $user->delete();
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $roster
+     */
+    private function persistRoster(array $roster): void
+    {
+        // Satu hash dipakai ulang agar seeding ratusan akun tetap cepat.
+        $hashedPassword = Hash::make('password123');
+
+        foreach ($roster as $data) {
+            $user = User::firstOrNew(['email' => $data['email']]);
+            $user->name = $data['name'];
+
+            if (! $user->exists) {
+                $user->password = $hashedPassword;
+            }
+
+            $user->save();
 
             if (! $user->hasRole('siswa')) {
                 $user->assignRole('siswa');
@@ -419,7 +331,5 @@ class StudentSeeder extends Seeder
                 ]
             );
         }
-
-        $this->command->info('✅ 24 siswa (20 siswa aktif tersebar di rombel + 4 alumni) berhasil di-seed.');
     }
 }
