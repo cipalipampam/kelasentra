@@ -129,6 +129,18 @@
                                        placeholder="Contoh: Guru Matematika Wajib, Kepala Lab">
                             </div>
                             <div class="col-md-6">
+                                <label for="employment_status" class="form-label text-dark fw-semibold small">Status Kepegawaian</label>
+                                <select class="form-select @error('employment_status') is-invalid @enderror"
+                                        id="employment_status" name="employment_status">
+                                    @foreach(\App\Models\Employee::statusLabels() as $statusValue => $statusLabel)
+                                        <option value="{{ $statusValue }}" {{ old('employment_status', \App\Models\Employee::STATUS_ACTIVE) === $statusValue ? 'selected' : '' }}>
+                                            {{ $statusLabel }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <div class="form-text text-muted small">Guru berstatus selain Aktif tidak dapat ditunjuk sebagai wali kelas.</div>
+                            </div>
+                            <div class="col-md-6">
                                 <label for="gender" class="form-label text-dark fw-semibold small">Jenis Kelamin</label>
                                 <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender">
                                     <option value="">-- Pilih Jenis Kelamin --</option>

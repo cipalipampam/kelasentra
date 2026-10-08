@@ -4,6 +4,7 @@ namespace App\Services\Web\Employee;
 
 use App\Events\DirectoryChanged;
 use App\Events\SessionInvalidated;
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -28,6 +29,7 @@ class EmployeeService
         $user->employee()->create([
             'nip' => $data['nip'] ?? null,
             'position' => $data['position'] ?? null,
+            'employment_status' => $data['employment_status'] ?? Employee::STATUS_ACTIVE,
             'gender' => $data['gender'] ?? null,
             'place_of_birth' => $data['place_of_birth'] ?? null,
             'date_of_birth' => $data['date_of_birth'] ?? null,
@@ -80,6 +82,9 @@ class EmployeeService
             [
                 'nip' => $data['nip'] ?? null,
                 'position' => $data['position'] ?? null,
+                'employment_status' => $data['employment_status']
+                    ?? $user->employee?->employment_status
+                    ?? Employee::STATUS_ACTIVE,
                 'gender' => $data['gender'] ?? null,
                 'place_of_birth' => $data['place_of_birth'] ?? null,
                 'date_of_birth' => $data['date_of_birth'] ?? null,

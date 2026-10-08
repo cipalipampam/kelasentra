@@ -68,9 +68,16 @@
                             <span class="badge bg-light text-secondary border px-2.5 py-1">Lainnya</span>
                         @endif
 
-                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1" style="font-size: 0.75rem;">
-                            <i class="bi bi-check-circle-fill me-1"></i>Aktif
-                        </span>
+                        @php $employeeStatus = $employee->employee->employment_status ?? \App\Models\Employee::STATUS_ACTIVE; @endphp
+                        @if($employeeStatus === \App\Models\Employee::STATUS_ACTIVE)
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1" style="font-size: 0.75rem;">
+                                <i class="bi bi-check-circle-fill me-1"></i>Aktif
+                            </span>
+                        @else
+                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1" style="font-size: 0.75rem;">
+                                <i class="bi bi-pause-circle-fill me-1"></i>{{ \App\Models\Employee::statusLabels()[$employeeStatus] ?? $employeeStatus }}
+                            </span>
+                        @endif
                     </div>
 
                     @if(isset($employee->employee->position) && $employee->employee->position)

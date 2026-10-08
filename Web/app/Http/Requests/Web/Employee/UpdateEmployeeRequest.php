@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Web\Employee;
 
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -26,6 +27,7 @@ class UpdateEmployeeRequest extends FormRequest
             'role' => 'required|in:guru,staff',
             'nip' => ['nullable', Rule::unique('employees', 'nip')->ignore($employeeId)],
             'position' => 'nullable|string|max:100',
+            'employment_status' => ['nullable', Rule::in(Employee::STATUSES)],
             'gender' => 'nullable|in:male,female',
             'place_of_birth' => 'nullable|string|max:100',
             'date_of_birth' => 'nullable|date',
@@ -50,6 +52,7 @@ class UpdateEmployeeRequest extends FormRequest
             'password.min' => 'Kata sandi baru minimal berjumlah :min karakter.',
             'role.required' => 'Klasifikasi peran wajib dipilih (Guru atau Staf).',
             'role.in' => 'Peran yang dipilih tidak valid.',
+            'employment_status.in' => 'Status kepegawaian yang dipilih tidak valid.',
             'nip.unique' => 'Nomor Induk Pegawai (NIP) ini sudah terdaftar pada akun lain.',
             'gender.in' => 'Pilihan jenis kelamin tidak valid.',
             'date_of_birth.date' => 'Format tanggal lahir tidak valid.',
@@ -67,6 +70,7 @@ class UpdateEmployeeRequest extends FormRequest
             'role' => 'peran kepegawaian',
             'nip' => 'NIP',
             'position' => 'jabatan / posisi',
+            'employment_status' => 'status kepegawaian',
             'gender' => 'jenis kelamin',
             'place_of_birth' => 'tempat lahir',
             'date_of_birth' => 'tanggal lahir',
