@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\Student\StoreStudentRequest;
 use App\Http\Requests\Web\Student\UpdateStudentRequest;
 use App\Models\User;
+use App\Services\Web\Academic\ClassroomService;
 use App\Services\Web\Student\StudentService;
 use Illuminate\Http\Request;
 
@@ -13,14 +14,17 @@ class StudentController extends Controller
 {
     protected $studentService;
 
-    public function __construct(StudentService $studentService)
+    protected $classroomService;
+
+    public function __construct(StudentService $studentService, ClassroomService $classroomService)
     {
         $this->studentService = $studentService;
+        $this->classroomService = $classroomService;
     }
 
     public function index(Request $request)
     {
-        $query = User::with(['student', 'roles'])->role('siswa');
+        $query = User::with(['student.classroom', 'roles'])->role('siswa');
 
         if ($request->has('search') && $request->search != '') {
             $search = $request->search;
@@ -33,25 +37,25 @@ class StudentController extends Controller
             });
         }
 
-        if ($request->has('grade') && $request->grade != '') {
-            $grade = $request->grade;
-            $query->whereHas('student', function ($q) use ($grade) {
-                $q->where('grade', $grade);
+        if ($request->filled('classroom_id')) {
+            $classroomId = (int) $request->input('classroom_id');
+            $query->whereHas('student', function ($q) use ($classroomId) {
+                $q->where('classroom_id', $classroomId);
             });
         }
 
         // Handle sorting
-        if ($request->has('sort') && in_array($request->sort, ['name', 'grade'])) {
+        if ($request->has('sort') && in_array($request->sort, ['name', 'classroom'])) {
             $direction = $request->direction === 'desc' ? 'desc' : 'asc';
 
             if ($request->sort === 'name') {
                 $query->orderBy('name', $direction);
-            } elseif ($request->sort === 'grade') {
-                // Sorting by a relationship column requires joining or subquery in Laravel.
-                // Alternatively, we can join the students table.
-                $query->join('students', 'users.id', '=', 'students.user_id')
-                    ->orderBy('students.grade', $direction)
-                    ->select('users.*'); // Ensure we select users' columns
+            } else {
+                $query->leftJoin('students', 'users.id', '=', 'students.user_id')
+                    ->leftJoin('classrooms', 'classrooms.id', '=', 'students.classroom_id')
+                    ->orderBy('classrooms.level', $direction)
+                    ->orderBy('classrooms.name', $direction)
+                    ->select('users.*');
             }
         } else {
             $query->orderBy('users.created_at', 'desc');
@@ -59,14 +63,16 @@ class StudentController extends Controller
 
         $students = $query->paginate($request->input('per_page', 10));
 
-        $grades = config('student.grades');
+        $classrooms = $this->classroomService->getActiveYearClassrooms();
 
-        return view('admin.students.index', compact('students', 'grades'));
+        return view('admin.students.index', compact('students', 'classrooms'));
     }
 
     public function create()
     {
-        return view('admin.students.create');
+        $classrooms = $this->classroomService->getEnrollableClassrooms();
+
+        return view('admin.students.create', compact('classrooms'));
     }
 
     public function store(StoreStudentRequest $request)
@@ -78,16 +84,19 @@ class StudentController extends Controller
 
     public function show($id)
     {
-        $student = User::with(['student'])->findOrFail($id);
+        $student = User::with(['student.classroom.homeroomTeacher'])->findOrFail($id);
 
         return view('admin.students.detail', compact('student'));
     }
 
     public function edit($id)
     {
-        $student = User::with(['student'])->findOrFail($id);
+        $student = User::with(['student.classroom'])->findOrFail($id);
 
-        return view('admin.students.edit', compact('student'));
+        $currentClassroomId = $student->student?->classroom_id;
+        $classrooms = $this->classroomService->getEnrollableClassrooms($currentClassroomId);
+
+        return view('admin.students.edit', compact('student', 'classrooms'));
     }
 
     public function update(UpdateStudentRequest $request, $id)
