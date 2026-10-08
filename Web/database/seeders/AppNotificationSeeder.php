@@ -45,6 +45,10 @@ class AppNotificationSeeder extends Seeder
                 ],
             ];
 
+            if ($this->alreadySeeded($student, $notifications)) {
+                continue;
+            }
+
             foreach ($notifications as $notif) {
                 AppNotification::create([
                     'user_id' => $student->id,
@@ -81,6 +85,10 @@ class AppNotificationSeeder extends Seeder
                 ],
             ];
 
+            if ($this->alreadySeeded($teacher, $notifications)) {
+                continue;
+            }
+
             foreach ($notifications as $notif) {
                 AppNotification::create([
                     'user_id' => $teacher->id,
@@ -97,6 +105,19 @@ class AppNotificationSeeder extends Seeder
         }
 
         $this->command->info("✅ {$count} notifikasi pengguna (siswa & guru) berhasil di-seed.");
+    }
+
+    /**
+     * Hindari duplikasi notifikasi ketika seeder dijalankan ulang.
+     *
+     * @param  list<array<string, mixed>>  $notifications
+     */
+    private function alreadySeeded(User $user, array $notifications): bool
+    {
+        return AppNotification::query()
+            ->where('user_id', $user->id)
+            ->whereIn('title', array_column($notifications, 'title'))
+            ->exists();
     }
 }
 

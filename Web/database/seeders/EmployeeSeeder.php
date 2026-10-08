@@ -203,6 +203,8 @@ class EmployeeSeeder extends Seeder
                     'nip' => $data['nip'],
                     'position' => $data['position'],
                     'is_teacher' => $data['is_teacher'],
+                    // Seluruh pegawai contoh berstatus aktif agar dapat menjadi wali kelas.
+                    'employment_status' => Employee::STATUS_ACTIVE,
                     'gender' => $data['gender'],
                     'place_of_birth' => $data['place_of_birth'],
                     'date_of_birth' => $data['date_of_birth'],
@@ -281,6 +283,9 @@ class EmployeeSeeder extends Seeder
             }
         }
 
-        $this->command->info('✅ 6 guru + 2 staff berhasil di-seed (lengkap dengan flag is_teacher & mapel yang diampu).');
+        $teacherCount = collect($this->employees)->where('is_teacher', true)->count();
+        $staffCount = count($this->employees) - $teacherCount;
+
+        $this->command->info("✅ {$teacherCount} guru + {$staffCount} staff berhasil di-seed (lengkap dengan flag is_teacher & mapel yang diampu).");
     }
 }
