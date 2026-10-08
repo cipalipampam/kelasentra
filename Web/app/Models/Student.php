@@ -37,6 +37,29 @@ class Student extends Model
         return $this->belongsTo(Classroom::class);
     }
 
+    public function isActive(): bool
+    {
+        return $this->academic_status === 'active';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function academicStatusLabels(): array
+    {
+        return [
+            'active' => 'Siswa Aktif',
+            'graduated' => 'Alumni (Lulus)',
+            'transferred' => 'Pindah Sekolah',
+            'dropped' => 'Keluar',
+        ];
+    }
+
+    public function academicStatusLabel(): string
+    {
+        return self::academicStatusLabels()[$this->academic_status] ?? 'Tidak diketahui';
+    }
+
     public function scheduleAttendances(): HasMany
     {
         return $this->hasMany(ScheduleAttendance::class);

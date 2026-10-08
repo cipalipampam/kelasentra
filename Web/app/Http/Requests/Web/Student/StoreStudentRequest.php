@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\Web\Student;
 
+use App\Rules\EnrollableClassroom;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class StoreStudentRequest extends FormRequest
 {
@@ -20,7 +20,7 @@ class StoreStudentRequest extends FormRequest
             'password' => 'required|min:6',
             'nis' => 'nullable|unique:students,nis',
             'nisn' => 'nullable|unique:students,nisn',
-            'grade' => ['required', Rule::in(config('student.grades'))],
+            'classroom_id' => ['required', 'integer', 'exists:classrooms,id', new EnrollableClassroom],
             'gender' => 'nullable|in:male,female',
             'place_of_birth' => 'nullable|string|max:100',
             'date_of_birth' => 'nullable|date',
@@ -41,7 +41,8 @@ class StoreStudentRequest extends FormRequest
             'password.min' => 'Kata sandi minimal terdiri dari 6 karakter.',
             'nis.unique' => 'Nomor Induk Siswa (NIS) ini sudah terdaftar.',
             'nisn.unique' => 'NISN ini sudah terdaftar untuk siswa lain.',
-            'grade.required' => 'Kelas / tingkatan wajib dipilih.',
+            'classroom_id.required' => 'Rombel wajib dipilih agar siswa langsung punya kelas.',
+            'classroom_id.exists' => 'Rombel yang dipilih tidak valid.',
             'profile_picture.image' => 'Foto profil harus berupa file gambar.',
             'profile_picture.max' => 'Ukuran foto profil maksimal 2MB.',
         ];
