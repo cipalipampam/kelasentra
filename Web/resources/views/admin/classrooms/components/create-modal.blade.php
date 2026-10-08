@@ -37,7 +37,7 @@
                             <label for="create_level" class="form-label text-dark fw-semibold small">
                                 Tingkat <span class="text-danger">*</span>
                             </label>
-                            <select name="level" id="create_level" class="form-select" required>
+                            <select name="level" id="create_level" class="form-select" data-level-select required>
                                 <option value="">— Pilih Tingkat —</option>
                                 <option value="10" {{ old('level') == '10' ? 'selected' : '' }}>Kelas X (Sepuluh)</option>
                                 <option value="11" {{ old('level') == '11' ? 'selected' : '' }}>Kelas XI (Sebelas)</option>
@@ -47,10 +47,15 @@
 
                         <div class="col-md-4">
                             <label for="create_major" class="form-label text-dark fw-semibold small">
-                                Jurusan <span class="text-danger">*</span>
+                                Jurusan <span class="text-danger" data-major-required-asterisk>*</span>
                             </label>
-                            <input type="text" name="major" id="create_major" class="form-control"
-                                   placeholder="Contoh: IPA, IPS, TKJ, RPL" value="{{ old('major') }}" required>
+                            <select name="major" id="create_major" class="form-select" data-major-select>
+                                <option value="">— Tanpa Jurusan —</option>
+                                @foreach($majors as $major)
+                                    <option value="{{ $major }}" {{ old('major') === $major ? 'selected' : '' }}>{{ $major }}</option>
+                                @endforeach
+                            </select>
+                            <div class="form-text small text-muted">Wajib untuk tingkat XI dan XII.</div>
                         </div>
 
                         <div class="col-md-4">
@@ -65,25 +70,43 @@
                             <label for="create_academic_year" class="form-label text-dark fw-semibold small">
                                 Tahun Ajaran <span class="text-danger">*</span>
                             </label>
-                            @php
-                                $defaultYear = date('Y') . '/' . (date('Y') + 1);
-                            @endphp
-                            <input type="text" name="academic_year" id="create_academic_year" class="form-control"
-                                   placeholder="Contoh: {{ $defaultYear }}" value="{{ old('academic_year', $defaultYear) }}" required>
+                            <select name="academic_year" id="create_academic_year" class="form-select"
+                                    data-academic-year-select required
+                                    {{ empty($academicYears) ? 'disabled' : '' }}>
+                                <option value="">— Pilih Tahun Ajaran —</option>
+                                @foreach($academicYears as $year)
+                                    <option value="{{ $year }}" {{ old('academic_year', $activeAcademicYear) === $year ? 'selected' : '' }}>
+                                        {{ $year }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @if(empty($academicYears))
+                                <div class="form-text small text-danger">
+                                    Belum ada tahun ajaran aktif. Tambahkan dulu di menu Tahun Ajaran.
+                                </div>
+                            @else
+                                <div class="form-text small text-muted">Hanya tahun ajaran aktif atau yang akan datang.</div>
+                            @endif
                         </div>
 
                         <div class="col-md-6">
                             <label for="create_homeroom_teacher" class="form-label text-dark fw-semibold small">
                                 Wali Kelas
                             </label>
-                            <select name="homeroom_teacher_id" id="create_homeroom_teacher" class="form-select">
+                            <select name="homeroom_teacher_id" id="create_homeroom_teacher" class="form-select"
+                                    data-homeroom-teacher-select>
                                 <option value="">— Belum Ditentukan —</option>
                                 @foreach($teachers as $teacher)
-                                    <option value="{{ $teacher->id }}" {{ old('homeroom_teacher_id') == $teacher->id ? 'selected' : '' }}>
+                                    <option value="{{ $teacher->id }}"
+                                            data-assigned-years="{{ json_encode($homeroomAssignments[$teacher->id] ?? []) }}"
+                                            {{ old('homeroom_teacher_id') == $teacher->id ? 'selected' : '' }}>
                                         {{ $teacher->name }}
                                     </option>
                                 @endforeach
                             </select>
+                            <div class="form-text small text-muted">
+                                Hanya guru berstatus aktif. Satu guru hanya boleh menjadi wali kelas satu rombel per tahun ajaran.
+                            </div>
                         </div>
 
                         <div class="col-12">
@@ -99,7 +122,8 @@
                 </div>
                 <div class="modal-footer border-0 pt-0 pb-4 px-4">
                     <button type="button" class="btn btn-sm btn-light border px-4" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-sm btn-primary px-4 fw-semibold shadow-xs">
+                    <button type="submit" class="btn btn-sm btn-primary px-4 fw-semibold shadow-xs"
+                            {{ empty($academicYears) ? 'disabled' : '' }}>
                         <i class="bi bi-plus-lg me-1"></i>Simpan Rombel
                     </button>
                 </div>

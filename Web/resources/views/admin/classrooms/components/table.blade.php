@@ -47,8 +47,11 @@
                             @endif
                         </td>
                         <td class="text-center">
-                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1" style="font-size: 0.75rem;">
-                                <i class="bi bi-people-fill me-1"></i>{{ $classroom->students_count }} Siswa
+                            @php $isFull = $classroom->active_students_count >= $studentCapacity; @endphp
+                            <span class="badge {{ $isFull ? 'bg-danger-subtle text-danger border-danger-subtle' : 'bg-secondary-subtle text-secondary' }} border px-2 py-1"
+                                  style="font-size: 0.75rem;"
+                                  title="{{ $isFull ? 'Rombel sudah penuh' : 'Sisa kuota '.($studentCapacity - $classroom->active_students_count).' siswa' }}">
+                                <i class="bi bi-people-fill me-1"></i>{{ $classroom->active_students_count }}/{{ $studentCapacity }}
                             </span>
                         </td>
                         <td>
