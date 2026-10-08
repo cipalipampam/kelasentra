@@ -120,6 +120,10 @@ class Classroom extends Model
             return 'Kelas tujuan wajib dipilih untuk proses kenaikan kelas.';
         }
 
+        if (! $target->is_active) {
+            return "Kelas tujuan {$target->name} sudah tidak aktif sehingga tidak dapat menerima siswa.";
+        }
+
         if ($target->level !== $nextLevel) {
             return "Kenaikan kelas harus bertahap satu tingkat. {$this->name} (tingkat {$this->level}) hanya dapat naik ke tingkat {$nextLevel}.";
         }

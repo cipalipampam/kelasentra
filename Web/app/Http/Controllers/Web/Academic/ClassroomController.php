@@ -164,6 +164,10 @@ class ClassroomController extends Controller
             $message .= " {$result['skipped']} siswa dilewati karena datanya sudah berubah sejak batch dijalankan.";
         }
 
+        if ($result['missing_classroom'] > 0) {
+            $message .= " {$result['missing_classroom']} siswa dilewati karena rombel asalnya sudah dihapus.";
+        }
+
         if ($result['reopened']) {
             $message .= " Rombel {$promotionBatch->source_classroom_name} dibuka kembali";
 

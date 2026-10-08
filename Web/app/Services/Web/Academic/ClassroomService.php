@@ -361,7 +361,7 @@ class ClassroomService
      * Siswa yang datanya sudah berubah lagi setelah batch berjalan dilewati
      * agar pembatalan tidak menimpa perubahan yang lebih baru.
      *
-     * @return array{restored: int, skipped: int, reopened: bool, homeroom_teacher_name: ?string}
+     * @return array{restored: int, skipped: int, missing_classroom: int, reopened: bool, homeroom_teacher_name: ?string}
      */
     public function revertBatch(PromotionBatch $batch, User $actor): array
     {
@@ -376,9 +376,18 @@ class ClassroomService
 
             $restored = 0;
             $skipped = 0;
+            $missingClassroom = 0;
 
             foreach ($batch->items as $item) {
                 $student = $item->student;
+
+                // Rombel asal sudah dihapus, sehingga posisi asal tidak dapat
+                // dipulihkan tanpa meninggalkan siswa aktif tanpa rombel.
+                if ($item->from_classroom_id === null) {
+                    $missingClassroom++;
+
+                    continue;
+                }
 
                 if ($student === null
                     || (int) $student->classroom_id !== (int) $item->to_classroom_id
@@ -424,6 +433,7 @@ class ClassroomService
             return [
                 'restored' => $restored,
                 'skipped' => $skipped,
+                'missing_classroom' => $missingClassroom,
                 'reopened' => $reopened['reopened'],
                 'homeroom_teacher_name' => $reopened['homeroom_teacher_name'],
             ];
