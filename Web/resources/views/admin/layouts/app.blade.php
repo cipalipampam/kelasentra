@@ -60,6 +60,13 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a href="{{ route('admin.academic-years.index') }}"
+                            class="nav-link {{ request()->routeIs('admin.academic-years.*') ? 'active' : '' }}" title="Tahun Ajaran">
+                            <i class="bi bi-calendar-range-fill"></i>
+                            <span class="link-text">Tahun Ajaran</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a href="{{ route('admin.subjects.index') }}"
                             class="nav-link {{ request()->routeIs('admin.subjects.*') ? 'active' : '' }}" title="Mata Pelajaran">
                             <i class="bi bi-journal-bookmark-fill"></i>
@@ -166,6 +173,7 @@
                     <span class="current">
                         @if(request()->routeIs('admin.students.*')) Data Siswa
                         @elseif(request()->routeIs('admin.employees.*')) Guru & Karyawan
+                        @elseif(request()->routeIs('admin.academic-years.*')) Tahun Ajaran
                         @elseif(request()->routeIs('admin.classrooms.promotion*'))
                             <a href="{{ route('admin.classrooms.index') }}" class="text-decoration-none text-muted">Rombel & Kelas</a>
                             <span class="separator">/</span>

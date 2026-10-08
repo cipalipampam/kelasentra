@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Web\Academic\AcademicYearController;
 use App\Http\Controllers\Web\AnnouncementController;
 use App\Http\Controllers\Web\Attendance\AdminAttendanceController;
 use App\Http\Controllers\Web\Auth\AuthController;
@@ -75,6 +76,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::resource('announcements', AnnouncementController::class)->except(['show']);
 
     // Academic Master Data & Class Promotion
+    Route::controller(AcademicYearController::class)->prefix('academic-years')->name('academic-years.')->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('/', 'store')->name('store');
+        Route::post('/{academicYear}/activate', 'activate')->name('activate');
+        Route::put('/{academicYear}', 'update')->name('update');
+        Route::delete('/{academicYear}', 'destroy')->name('destroy');
+    });
+
     Route::get('classrooms/promotion', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'promotion'])->name('classrooms.promotion');
     Route::post('classrooms/promotion', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'processPromotion'])->name('classrooms.promotion.process');
     Route::get('classrooms/{classroom}/students', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'getStudents'])->name('classrooms.students');
