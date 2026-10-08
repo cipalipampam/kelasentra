@@ -36,7 +36,7 @@
                                 <label class="form-label text-dark fw-semibold small">
                                     Tingkat <span class="text-danger">*</span>
                                 </label>
-                                <select name="level" class="form-select" required>
+                                <select name="level" class="form-select" data-level-select required>
                                     <option value="10" {{ old('level', $classroom->level) == 10 ? 'selected' : '' }}>Kelas X (Sepuluh)</option>
                                     <option value="11" {{ old('level', $classroom->level) == 11 ? 'selected' : '' }}>Kelas XI (Sebelas)</option>
                                     <option value="12" {{ old('level', $classroom->level) == 12 ? 'selected' : '' }}>Kelas XII (Dua Belas)</option>
@@ -45,10 +45,15 @@
 
                             <div class="col-md-4">
                                 <label class="form-label text-dark fw-semibold small">
-                                    Jurusan <span class="text-danger">*</span>
+                                    Jurusan <span class="text-danger" data-major-required-asterisk>*</span>
                                 </label>
-                                <input type="text" name="major" class="form-control"
-                                       placeholder="Contoh: IPA, IPS, TKJ" value="{{ old('major', $classroom->major) }}" required>
+                                <select name="major" class="form-select" data-major-select>
+                                    <option value="">— Tanpa Jurusan —</option>
+                                    @foreach($majors as $major)
+                                        <option value="{{ $major }}" {{ old('major', $classroom->major) === $major ? 'selected' : '' }}>{{ $major }}</option>
+                                    @endforeach
+                                </select>
+                                <div class="form-text small text-muted">Wajib untuk tingkat XI dan XII.</div>
                             </div>
 
                             <div class="col-md-4">
@@ -59,27 +64,52 @@
                                        placeholder="Contoh: 1, 2, A, B" value="{{ old('section', $classroom->section) }}" required>
                             </div>
 
+                            @php
+                                // Tahun ajaran yang sudah diarsipkan tetap ditampilkan agar
+                                // rombel lama dapat diedit tanpa memaksa pindah tahun ajaran.
+                                $editYears = collect($academicYears);
+                                if ($classroom->academic_year && ! $editYears->contains($classroom->academic_year)) {
+                                    $editYears->push($classroom->academic_year);
+                                }
+                                $editYears = $editYears->unique()->sortDesc()->values();
+                            @endphp
                             <div class="col-md-6">
                                 <label class="form-label text-dark fw-semibold small">
                                     Tahun Ajaran <span class="text-danger">*</span>
                                 </label>
-                                <input type="text" name="academic_year" class="form-control"
-                                       placeholder="Contoh: 2025/2026" value="{{ old('academic_year', $classroom->academic_year) }}" required>
+                                <select name="academic_year" class="form-select" data-academic-year-select required>
+                                    <option value="">— Pilih Tahun Ajaran —</option>
+                                    @foreach($editYears as $year)
+                                        <option value="{{ $year }}" {{ old('academic_year', $classroom->academic_year) === $year ? 'selected' : '' }}>
+                                            {{ $year }}{{ in_array($year, $academicYears, true) ? '' : ' (Diarsipkan)' }}
+                                        </option>
+                                    @endforeach
+                                </select>
                             </div>
 
                             <div class="col-md-6">
                                 <label class="form-label text-dark fw-semibold small">
                                     Wali Kelas
                                 </label>
-                                <select name="homeroom_teacher_id" class="form-select">
+                                <select name="homeroom_teacher_id" class="form-select" data-homeroom-teacher-select>
                                     <option value="">— Belum Ditentukan —</option>
                                     @foreach($teachers as $teacher)
+                                        @php
+                                            // Abaikan penugasan rombel ini sendiri agar guru yang sedang
+                                            // menjabat tidak ikut ter-disable saat mengedit.
+                                            $assignedYears = collect($homeroomAssignments[$teacher->id] ?? [])
+                                                ->reject(fn ($year) => $year === $classroom->academic_year
+                                                    && (int) $classroom->homeroom_teacher_id === (int) $teacher->id)
+                                                ->values();
+                                        @endphp
                                         <option value="{{ $teacher->id }}"
+                                                data-assigned-years="{{ json_encode($assignedYears->all()) }}"
                                             {{ old('homeroom_teacher_id', $classroom->homeroom_teacher_id) == $teacher->id ? 'selected' : '' }}>
                                             {{ $teacher->name }}
                                         </option>
                                     @endforeach
                                 </select>
+                                <div class="form-text small text-muted">Hanya guru berstatus aktif.</div>
                             </div>
 
                             <div class="col-12">

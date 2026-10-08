@@ -21,8 +21,12 @@
             </div>
             <div class="col-lg-5 col-md-7">
                 <label for="major" class="form-label small fw-semibold text-secondary mb-1">Jurusan</label>
-                <input type="text" name="major" id="major" class="form-control"
-                       placeholder="Contoh: IPA, IPS, RPL..." value="{{ request('major') }}">
+                <select name="major" id="major" class="form-select">
+                    <option value="">Semua Jurusan</option>
+                    @foreach($majors as $major)
+                        <option value="{{ $major }}" {{ request('major') === $major ? 'selected' : '' }}>{{ $major }}</option>
+                    @endforeach
+                </select>
             </div>
         </form>
     </div>

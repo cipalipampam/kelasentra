@@ -52,6 +52,7 @@ export function initClassroomNamingAssistant() {
 
     levelSelect.addEventListener('change', checkSuggestion);
     majorInput.addEventListener('input', checkSuggestion);
+    majorInput.addEventListener('change', checkSuggestion);
     sectionInput.addEventListener('input', checkSuggestion);
 
     if (suggestBtn) {
