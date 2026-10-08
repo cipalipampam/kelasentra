@@ -9,12 +9,16 @@ use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class ClassroomService
 {
     public function getPaginatedClassrooms(array $filters = [], int $perPage = 10): LengthAwarePaginator
     {
-        $query = Classroom::with(['homeroomTeacher'])->withCount('students');
+        $query = Classroom::with(['homeroomTeacher'])->withCount([
+            'students',
+            'students as active_students_count' => fn ($studentQuery) => $studentQuery->where('academic_status', 'active'),
+        ]);
 
         if (! empty($filters['level'])) {
             $query->where('level', $filters['level']);
@@ -38,6 +42,9 @@ class ClassroomService
     public function getAllActiveClassrooms(): Collection
     {
         return Classroom::where('is_active', true)
+            ->withCount([
+                'students as active_students_count' => fn ($query) => $query->where('academic_status', 'active'),
+            ])
             ->orderBy('level')
             ->orderBy('name')
             ->get();
@@ -45,7 +52,27 @@ class ClassroomService
 
     public function getEligibleHomeroomTeachers(): Collection
     {
-        return User::role('guru')->orderBy('name')->get();
+        // Hanya guru berstatus aktif yang boleh ditunjuk sebagai wali kelas.
+        return User::query()
+            ->eligibleHomeroomTeacher()
+            ->with('employee:id,user_id,employment_status')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Peta guru => daftar tahun ajaran tempat ia sudah menjadi wali kelas.
+     *
+     * @return array<int, list<string>>
+     */
+    public function getHomeroomAssignments(): array
+    {
+        return Classroom::query()
+            ->whereNotNull('homeroom_teacher_id')
+            ->get(['homeroom_teacher_id', 'academic_year'])
+            ->groupBy('homeroom_teacher_id')
+            ->map(fn ($rows) => $rows->pluck('academic_year')->unique()->values()->all())
+            ->all();
     }
 
     public function getStudentsByClassroom(int $classroomId, ?string $status = 'active'): Collection
@@ -102,6 +129,19 @@ class ClassroomService
                 ->whereIn('id', $studentIds)
                 ->where('classroom_id', $sourceClassroomId)
                 ->get();
+
+            // Kapasitas rombel tujuan tidak boleh terlampaui.
+            if ($action === 'promote' && $targetClass && $students->isNotEmpty() && ! $targetClass->hasRoomFor($students->count())) {
+                throw ValidationException::withMessages([
+                    'target_classroom_id' => sprintf(
+                        'Kelas tujuan %s hanya menyisakan %d kursi, sedangkan %d siswa akan dipindahkan. Kapasitas maksimal %d siswa per rombel.',
+                        $targetClass->name,
+                        $targetClass->remainingCapacity(),
+                        $students->count(),
+                        $targetClass->maxStudents(),
+                    ),
+                ]);
+            }
 
             $processedCount = 0;
 

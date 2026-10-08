@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\Academic\ProcessClassPromotionRequest;
 use App\Http\Requests\Web\Academic\StoreClassroomRequest;
 use App\Http\Requests\Web\Academic\UpdateClassroomRequest;
+use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Services\Web\Academic\ClassroomService;
 use Illuminate\Http\JsonResponse;
@@ -27,8 +28,31 @@ class ClassroomController extends Controller
         );
 
         $teachers = $this->classroomService->getEligibleHomeroomTeachers();
+        $homeroomAssignments = $this->classroomService->getHomeroomAssignments();
+        $academicYears = AcademicYear::selectableNames();
+        $activeAcademicYear = AcademicYear::query()
+            ->where('status', AcademicYear::STATUS_ACTIVE)
+            ->orderByDesc('name')
+            ->value('name');
+        $majors = config('classroom.majors');
+        $studentCapacity = Classroom::studentCapacity();
 
-        return view('admin.classrooms.index', compact('classrooms', 'teachers'));
+        $stats = [
+            'total' => Classroom::count(),
+            'active' => Classroom::where('is_active', true)->count(),
+            'inactive' => Classroom::where('is_active', false)->count(),
+        ];
+
+        return view('admin.classrooms.index', compact(
+            'classrooms',
+            'teachers',
+            'homeroomAssignments',
+            'academicYears',
+            'activeAcademicYear',
+            'majors',
+            'studentCapacity',
+            'stats',
+        ));
     }
 
     public function store(StoreClassroomRequest $request): RedirectResponse
@@ -79,7 +103,11 @@ class ClassroomController extends Controller
             }
         }
 
-        return view('admin.classrooms.promotion', compact('allClassrooms', 'selectedClassroom', 'students'));
+        return view('admin.classrooms.promotion', compact(
+            'allClassrooms',
+            'selectedClassroom',
+            'students',
+        ) + ['studentCapacity' => Classroom::studentCapacity()]);
     }
 
     /**
