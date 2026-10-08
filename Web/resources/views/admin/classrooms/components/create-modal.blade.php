@@ -63,7 +63,11 @@
                                 Nomor / Sesi Rombel <span class="text-danger">*</span>
                             </label>
                             <input type="text" name="section" id="create_section" class="form-control"
-                                   placeholder="Contoh: 1, 2, A, B" value="{{ old('section') }}" required>
+                                   placeholder="Contoh: 1, 2, A, B" value="{{ old('section') }}"
+                                   data-section-overview="{{ json_encode($sectionOverview, JSON_UNESCAPED_SLASHES) }}" required>
+                            <div class="form-text small text-muted" id="create_section_hint">
+                                Nomor sesi terisi otomatis setelah tingkat, jurusan, dan tahun ajaran dipilih.
+                            </div>
                         </div>
 
                         <div class="col-md-6">
