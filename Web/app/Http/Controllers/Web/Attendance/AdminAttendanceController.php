@@ -7,8 +7,10 @@ use App\Http\Requests\Web\Attendance\ResolveAttendanceRequest;
 use App\Http\Requests\Web\Attendance\StoreAttendanceRequest;
 use App\Http\Requests\Web\Attendance\UpdateAttendanceRequest;
 use App\Models\Attendance;
+use App\Models\Classroom;
 use App\Models\User;
 use App\Services\Shared\Storage\AttendanceProofStorage;
+use App\Services\Web\Academic\ClassroomService;
 use App\Services\Web\Attendance\AdminAttendanceService;
 use App\Services\Web\Attendance\AttendanceExportService;
 use Carbon\Carbon;
@@ -20,6 +22,7 @@ class AdminAttendanceController extends Controller
     public function __construct(
         private readonly AttendanceExportService $exportService,
         private readonly AdminAttendanceService $attendanceService,
+        private readonly ClassroomService $classroomService,
     ) {}
 
     public function index(Request $request)
@@ -129,7 +132,9 @@ class AdminAttendanceController extends Controller
         $filters = $this->filters($request);
         $attendances = $this->attendanceQuery($filters)->orderByDesc('recorded_at')->get();
 
-        return view('admin.attendances.print', array_merge(compact('attendances'), $filters));
+        return view('admin.attendances.print', array_merge(compact('attendances'), $filters, [
+            'classroom' => $filters['classroom_id'] ? Classroom::find($filters['classroom_id']) : null,
+        ]));
     }
 
     private function renderIndex(Request $request, ?string $attendanceType = null)
@@ -144,9 +149,9 @@ class AdminAttendanceController extends Controller
         $perPage = min(max((int) $request->input('per_page', 10), 10), 100);
         $attendances = $query->orderByDesc('recorded_at')->paginate($perPage);
         $attendances->appends($filters + ['per_page' => $perPage]);
-        $grades = collect(config('student.grades'));
+        $classrooms = $this->classroomService->getActiveYearClassrooms();
 
-        return view('admin.attendances.index', array_merge(compact('attendances', 'grades'), $filters, [
+        return view('admin.attendances.index', array_merge(compact('attendances', 'classrooms'), $filters, [
             'attendanceType' => $attendanceType,
             'attendanceRouteName' => match ($attendanceType) {
                 'siswa' => 'admin.attendances.students',
@@ -164,7 +169,7 @@ class AdminAttendanceController extends Controller
             'month' => $request->integer('month') ?: null,
             'year' => $request->integer('year') ?: null,
             'role' => $request->input('role'),
-            'grade' => $request->input('grade'),
+            'classroom_id' => $request->integer('classroom_id') ?: null,
             'approval' => $request->input('approval') === 'pending' ? 'pending' : null,
         ];
     }
@@ -192,8 +197,9 @@ class AdminAttendanceController extends Controller
                 : $query->role($role));
         }
 
-        if ($filters['grade']) {
-            $query->whereHas('user.student', fn (Builder $query) => $query->where('grade', $filters['grade']));
+        if ($filters['classroom_id']) {
+            $classroomId = $filters['classroom_id'];
+            $query->whereHas('user.student', fn (Builder $query) => $query->where('classroom_id', $classroomId));
         }
 
         if ($filters['approval'] === 'pending') {
