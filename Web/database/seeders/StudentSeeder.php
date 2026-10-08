@@ -28,6 +28,15 @@ class StudentSeeder extends Seeder
 
     private const FIRST_NAME_POOL_SIZE = 24;
 
+    private const LAST_NAME_POOL_SIZE = 32;
+
+    /**
+     * Langkah indeks nama belakang. 7 koprima dengan 32 sehingga nama belakang
+     * berganti setiap siswa, namun pasangan (nama depan, nama belakang) tetap
+     * unik untuk 96 siswa pertama setiap gender.
+     */
+    private const LAST_NAME_STRIDE = 7;
+
     private const MALE_FIRST_NAMES = [
         'Ahmad', 'Budi', 'Dimas', 'Fajar', 'Rizki', 'Bagas',
         'Reza', 'Galih', 'Alif', 'Farhan', 'Rizal', 'Kevin',
@@ -42,13 +51,22 @@ class StudentSeeder extends Seeder
         'Salma', 'Tania', 'Vina', 'Wulan', 'Zahra', 'Kirana',
     ];
 
-    private const LAST_NAMES = [
-        'Pratama', 'Santoso', 'Anggraeni', 'Maulana', 'Azzahra', 'Ramadhan',
-        'Sanjaya', 'Stephanie', 'Pamungkas', 'Tanuwijaya', 'Fahlevi', 'Andini',
-        'Syahputra', 'Maharani', 'Hapsari', 'Rakasiwi', 'Firmansyah', 'Wardani',
-        'Hidayat', 'Wandira', 'Kusuma', 'Permata', 'Wijaya', 'Nugroho',
-        'Saputra', 'Setiawan', 'Lestari', 'Hartono', 'Susanto', 'Wibowo',
-        'Handayani', 'Purnama',
+    private const MALE_LAST_NAMES = [
+        'Pratama', 'Santoso', 'Maulana', 'Ramadhan', 'Sanjaya', 'Pamungkas',
+        'Tanuwijaya', 'Fahlevi', 'Syahputra', 'Rakasiwi', 'Firmansyah', 'Hidayat',
+        'Kusuma', 'Permana', 'Wijaya', 'Nugroho', 'Saputra', 'Setiawan',
+        'Hartono', 'Susanto', 'Wibowo', 'Handoko', 'Purnama', 'Siregar',
+        'Nugraha', 'Gunawan', 'Ardianto', 'Wicaksono', 'Prasetya', 'Mahendra',
+        'Simbolon', 'Sihombing',
+    ];
+
+    private const FEMALE_LAST_NAMES = [
+        'Anggraeni', 'Azzahra', 'Andini', 'Maharani', 'Hapsari', 'Wardani',
+        'Wandira', 'Lestari', 'Handayani', 'Pertiwi', 'Rahmawati', 'Kusumawati',
+        'Wulandari', 'Puspita', 'Utami', 'Novianti', 'Yuliana', 'Safitri',
+        'Amalia', 'Fitriani', 'Nabilah', 'Ramadhani', 'Cahyani', 'Widyastuti',
+        'Susanti', 'Rahayu', 'Marlina', 'Nuraini', 'Oktaviani', 'Salsabila',
+        'Maesaroh', 'Kartika',
     ];
 
     private const CITIES = [
@@ -258,12 +276,13 @@ class StudentSeeder extends Seeder
     private function nextGeneratedName(bool $isMale, int &$maleIndex, int &$femaleIndex, array &$usedEmails, string $domain = 'siswa.sch.id'): array
     {
         $pool = $isMale ? self::MALE_FIRST_NAMES : self::FEMALE_FIRST_NAMES;
+        $surnames = $isMale ? self::MALE_LAST_NAMES : self::FEMALE_LAST_NAMES;
 
         while (true) {
             $index = $isMale ? $maleIndex++ : $femaleIndex++;
 
             $first = $pool[$index % self::FIRST_NAME_POOL_SIZE];
-            $last = self::LAST_NAMES[intdiv($index, self::FIRST_NAME_POOL_SIZE) % count(self::LAST_NAMES)];
+            $last = $surnames[($index * self::LAST_NAME_STRIDE) % self::LAST_NAME_POOL_SIZE];
             $email = strtolower($first.'.'.$last).'@'.$domain;
 
             if (! in_array($email, $usedEmails, true)) {
@@ -299,6 +318,11 @@ class StudentSeeder extends Seeder
     {
         // Satu hash dipakai ulang agar seeding ratusan akun tetap cepat.
         $hashedPassword = Hash::make('password123');
+
+        // Setelah pruning hanya siswa di roster yang tersisa. Lepaskan NIS/NISN
+        // lama sebelum penomoran ulang supaya tidak bertabrakan dengan nomor
+        // yang masih dipegang siswa lain pada unique index.
+        Student::query()->update(['nis' => null, 'nisn' => null]);
 
         foreach ($roster as $data) {
             $user = User::firstOrNew(['email' => $data['email']]);
