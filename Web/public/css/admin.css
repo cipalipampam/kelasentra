@@ -686,14 +686,21 @@ th.sortable a.active-sort {
 /* ===================================================
    BUTTONS
    =================================================== */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    transition: all 0.15s ease;
+}
+
 .btn-primary {
     background-color: var(--accent-primary) !important;
-    border-color: var(--accent-primary) !important;
+    border: 1px solid var(--accent-primary) !important;
     color: #ffffff !important;
-    font-weight: 600;
-    padding: 0.55rem 1.25rem;
+    font-weight: 500;
+    padding: 0.5rem 1.15rem;
     border-radius: var(--border-radius-sm);
-    transition: all 0.15s ease;
     box-shadow: var(--shadow-xs);
 }
 
@@ -705,15 +712,61 @@ th.sortable a.active-sort {
 }
 
 .btn-outline-primary {
-    border-color: var(--border-color) !important;
+    border: 1px solid var(--border-color) !important;
     color: var(--accent-primary) !important;
     background-color: #ffffff !important;
     font-weight: 500;
+    padding: 0.5rem 1.15rem;
+    border-radius: var(--border-radius-sm);
 }
 
 .btn-outline-primary:hover {
     background-color: var(--accent-primary-light) !important;
     border-color: var(--accent-primary) !important;
+}
+
+/* Symmetrical and perfectly balanced small buttons */
+.btn.btn-sm,
+.btn-sm {
+    padding: 0.42rem 0.95rem !important;
+    font-size: 0.8125rem !important;
+    line-height: 1.4 !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+}
+
+/* ===================================================
+   ACTION TOGGLE BUTTONS (Kenaikan Kelas & Kelulusan)
+   =================================================== */
+.action-toggle-card {
+    position: relative;
+}
+.action-toggle-btn {
+    border: 1px solid #e2e8f0 !important;
+    background-color: #f8fafc !important;
+    color: #64748b !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+.action-toggle-btn:hover {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #334155 !important;
+}
+#actionPromote:checked + .action-toggle-promote,
+.btn-check[value="promote"]:checked + .action-toggle-promote {
+    background-color: #2563eb !important;
+    border-color: #2563eb !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3) !important;
+}
+#actionGraduate:checked + .action-toggle-graduate,
+.btn-check[value="graduate"]:checked + .action-toggle-graduate {
+    background-color: #059669 !important;
+    border-color: #059669 !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3) !important;
 }
 
 /* ===================================================

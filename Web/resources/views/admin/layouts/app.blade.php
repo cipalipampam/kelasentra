@@ -166,6 +166,10 @@
                     <span class="current">
                         @if(request()->routeIs('admin.students.*')) Data Siswa
                         @elseif(request()->routeIs('admin.employees.*')) Guru & Karyawan
+                        @elseif(request()->routeIs('admin.classrooms.promotion*'))
+                            <a href="{{ route('admin.classrooms.index') }}" class="text-decoration-none text-muted">Rombel & Kelas</a>
+                            <span class="separator">/</span>
+                            <span>Kenaikan Kelas</span>
                         @elseif(request()->routeIs('admin.classrooms.*')) Rombel & Kelas
                         @elseif(request()->routeIs('admin.subjects.*')) Mata Pelajaran
                         @elseif(request()->routeIs('admin.schedules.*')) Jadwal Pelajaran
