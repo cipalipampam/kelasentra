@@ -257,6 +257,9 @@ class ClassroomService
                 ]);
             }
 
+            $closesSourceClassroom = $sourceClass->is_active
+                && $sourceClass->activeStudentCount() === $students->count();
+
             $batch = PromotionBatch::create([
                 'action' => $action,
                 'source_classroom_id' => $sourceClass->id,
@@ -265,6 +268,9 @@ class ClassroomService
                 'target_classroom_id' => $targetClass?->id,
                 'target_classroom_name' => $targetClass?->name,
                 'target_academic_year' => $targetClass?->academic_year,
+                'source_classroom_closed' => $closesSourceClassroom,
+                'homeroom_teacher_id' => $closesSourceClassroom ? $sourceClass->homeroom_teacher_id : null,
+                'homeroom_teacher_name' => $closesSourceClassroom ? $sourceClass->homeroomTeacher?->name : null,
                 'performed_by' => $actor->id,
                 'performed_by_name' => $actor->name,
                 'student_count' => $students->count(),
@@ -323,6 +329,16 @@ class ClassroomService
             // Jejak audit ditulis sekali untuk seluruh siswa.
             PromotionBatchItem::insert($itemRows);
 
+            // Rombel asal yang tidak menyisakan siswa aktif lagi dianggap selesai:
+            // ditutup dan wali kelasnya dilepas agar gurunya bisa dirotasi ke
+            // rombel lain, termasuk pada tahun ajaran yang sama.
+            if ($closesSourceClassroom) {
+                $sourceClass->update([
+                    'is_active' => false,
+                    'homeroom_teacher_id' => null,
+                ]);
+            }
+
             return $batch;
         });
     }
@@ -345,7 +361,7 @@ class ClassroomService
      * Siswa yang datanya sudah berubah lagi setelah batch berjalan dilewati
      * agar pembatalan tidak menimpa perubahan yang lebih baru.
      *
-     * @return array{restored: int, skipped: int}
+     * @return array{restored: int, skipped: int, reopened: bool, homeroom_teacher_name: ?string}
      */
     public function revertBatch(PromotionBatch $batch, User $actor): array
     {
@@ -403,7 +419,65 @@ class ClassroomService
                 'reverted_by_name' => $actor->name,
             ]);
 
-            return ['restored' => $restored, 'skipped' => $skipped];
+            $reopened = $this->reopenSourceClassroom($batch, $restored);
+
+            return [
+                'restored' => $restored,
+                'skipped' => $skipped,
+                'reopened' => $reopened['reopened'],
+                'homeroom_teacher_name' => $reopened['homeroom_teacher_name'],
+            ];
         });
+    }
+
+    /**
+     * Membuka kembali rombel asal yang ditutup batch ini, lengkap dengan wali
+     * kelasnya.
+     *
+     * Wali kelas hanya dikembalikan bila kursinya belum dipakai rombel lain
+     * pada tahun ajaran yang sama, agar aturan satu guru satu rombel per tahun
+     * ajaran tidak dilanggar.
+     *
+     * @return array{reopened: bool, homeroom_teacher_name: ?string}
+     */
+    private function reopenSourceClassroom(PromotionBatch $batch, int $restoredStudents): array
+    {
+        $nothingToDo = ['reopened' => false, 'homeroom_teacher_name' => null];
+
+        if (! $batch->source_classroom_closed || $restoredStudents === 0) {
+            return $nothingToDo;
+        }
+
+        $sourceClass = $batch->source_classroom_id !== null
+            ? Classroom::find($batch->source_classroom_id)
+            : null;
+
+        if ($sourceClass === null) {
+            return $nothingToDo;
+        }
+
+        $homeroomTeacherId = $batch->homeroom_teacher_id;
+
+        if ($homeroomTeacherId !== null) {
+            $isTakenElsewhere = Classroom::query()
+                ->where('homeroom_teacher_id', $homeroomTeacherId)
+                ->where('academic_year', $sourceClass->academic_year)
+                ->whereKeyNot($sourceClass->id)
+                ->exists();
+
+            if ($isTakenElsewhere) {
+                $homeroomTeacherId = null;
+            }
+        }
+
+        $sourceClass->update([
+            'is_active' => true,
+            'homeroom_teacher_id' => $homeroomTeacherId,
+        ]);
+
+        return [
+            'reopened' => true,
+            'homeroom_teacher_name' => $homeroomTeacherId !== null ? $batch->homeroom_teacher_name : null,
+        ];
     }
 }

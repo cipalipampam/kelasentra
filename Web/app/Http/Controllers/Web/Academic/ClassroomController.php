@@ -139,6 +139,14 @@ class ClassroomController extends Controller
             ? "Sukses! Sebanyak {$batch->student_count} siswa dari {$batch->source_classroom_name} berhasil dipromosikan ke {$batch->target_classroom_name}."
             : "Sukses! Sebanyak {$batch->student_count} siswa dari {$batch->source_classroom_name} telah diproses status kelulusannya.";
 
+        if ($batch->source_classroom_closed) {
+            $message .= " Rombel {$batch->source_classroom_name} ditutup karena tidak ada siswa aktif tersisa";
+
+            $message .= $batch->homeroom_teacher_name !== null
+                ? ", dan wali kelas {$batch->homeroom_teacher_name} dilepas sehingga bisa dirotasi ke rombel lain."
+                : '.';
+        }
+
         return redirect()->route('admin.classrooms.promotion')
             ->with('success', $message);
     }
@@ -154,6 +162,14 @@ class ClassroomController extends Controller
 
         if ($result['skipped'] > 0) {
             $message .= " {$result['skipped']} siswa dilewati karena datanya sudah berubah sejak batch dijalankan.";
+        }
+
+        if ($result['reopened']) {
+            $message .= " Rombel {$promotionBatch->source_classroom_name} dibuka kembali";
+
+            $message .= $result['homeroom_teacher_name'] !== null
+                ? " beserta wali kelas {$result['homeroom_teacher_name']}."
+                : '.';
         }
 
         return redirect()->route('admin.classrooms.promotion')
