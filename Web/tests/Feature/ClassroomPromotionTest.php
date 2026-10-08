@@ -77,7 +77,7 @@ class ClassroomPromotionTest extends TestCase
         $response->assertForbidden();
     }
 
-    public function test_admin_can_get_students_by_classroom_via_json(): void
+    public function test_admin_can_get_students_by_classroom_via_ajax(): void
     {
         $admin = $this->createAdmin();
         $classroom = $this->createClassroom('X-MIPA 1', '10');
@@ -85,13 +85,14 @@ class ClassroomPromotionTest extends TestCase
         $student2 = $this->createStudentInClassroom($classroom, '1002');
 
         $response = $this->actingAs($admin)
-            ->getJson(route('admin.classrooms.students', $classroom->id));
+            ->get(route('admin.classrooms.students', $classroom->id));
 
-        $response->assertOk()
-            ->assertJsonPath('success', true)
-            ->assertJsonPath('total', 2)
-            ->assertJsonCount(2, 'students')
-            ->assertJsonPath('classroom.id', $classroom->id);
+        $response->assertOk();
+
+        // Endpoint mengirim HTML baris tabel dari partial yang sama dengan render server-side.
+        $this->assertSame(2, substr_count($response->getContent(), 'student-checkbox'));
+        $this->assertStringContainsString($student1->user->name, $response->getContent());
+        $this->assertStringContainsString($student2->user->name, $response->getContent());
     }
 
     public function test_admin_can_promote_selected_students_to_target_classroom(): void

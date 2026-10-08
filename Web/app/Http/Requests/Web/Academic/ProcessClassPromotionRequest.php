@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Web\Academic;
 
+use App\Models\Classroom;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ProcessClassPromotionRequest extends FormRequest
@@ -22,8 +23,8 @@ class ProcessClassPromotionRequest extends FormRequest
                 'different:source_classroom_id',
                 'exists:classrooms,id',
             ],
-            'student_ids' => ['required', 'array', 'min:1'],
-            'student_ids.*' => ['integer', 'exists:students,id'],
+            'student_ids' => ['required', 'array', 'min:1', 'max:'.Classroom::studentCapacity()],
+            'student_ids.*' => ['integer', 'distinct', 'exists:students,id'],
         ];
     }
 
@@ -39,7 +40,9 @@ class ProcessClassPromotionRequest extends FormRequest
             'target_classroom_id.exists' => 'Kelas tujuan yang dipilih tidak ditemukan.',
             'student_ids.required' => 'Minimal satu siswa harus dipilih untuk diproses.',
             'student_ids.min' => 'Paling sedikit satu siswa harus dipilih.',
+            'student_ids.max' => 'Maksimal :max siswa dapat diproses sekaligus.',
             'student_ids.*.exists' => 'Data siswa yang dipilih tidak valid.',
+            'student_ids.*.distinct' => 'Daftar siswa tidak boleh berisi data ganda.',
         ];
     }
 }

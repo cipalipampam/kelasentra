@@ -8,10 +8,11 @@ use App\Http\Requests\Web\Academic\StoreClassroomRequest;
 use App\Http\Requests\Web\Academic\UpdateClassroomRequest;
 use App\Models\AcademicYear;
 use App\Models\Classroom;
+use App\Models\PromotionBatch;
 use App\Services\Web\Academic\ClassroomService;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 class ClassroomController extends Controller
@@ -29,6 +30,7 @@ class ClassroomController extends Controller
 
         $teachers = $this->classroomService->getEligibleHomeroomTeachers();
         $homeroomAssignments = $this->classroomService->getHomeroomAssignments();
+        $sectionOverview = $this->classroomService->getSectionOverview();
         $academicYears = AcademicYear::selectableNames();
         $activeAcademicYear = AcademicYear::query()
             ->where('status', AcademicYear::STATUS_ACTIVE)
@@ -47,6 +49,7 @@ class ClassroomController extends Controller
             'classrooms',
             'teachers',
             'homeroomAssignments',
+            'sectionOverview',
             'academicYears',
             'activeAcademicYear',
             'majors',
@@ -103,43 +106,25 @@ class ClassroomController extends Controller
             }
         }
 
-        return view('admin.classrooms.promotion', compact(
-            'allClassrooms',
-            'selectedClassroom',
-            'students',
-        ) + ['studentCapacity' => Classroom::studentCapacity()]);
+        return view('admin.classrooms.promotion', [
+            'allClassrooms' => $allClassrooms,
+            'selectedClassroom' => $selectedClassroom,
+            'students' => $students,
+            'studentCapacity' => Classroom::studentCapacity(),
+            'promotionHistory' => $this->classroomService->getPromotionHistory(),
+        ]);
     }
 
     /**
-     * AJAX endpoint untuk mengambil daftar siswa aktif di suatu rombel kelas.
+     * Endpoint AJAX daftar siswa aktif di suatu rombel kelas.
+     *
+     * Mengembalikan HTML baris tabel, bukan JSON, agar markup baris hanya
+     * ada di satu partial yang dipakai bersama render server-side.
      */
-    public function getStudents(Classroom $classroom): JsonResponse
+    public function getStudents(Classroom $classroom): Response
     {
-        $students = $this->classroomService->getStudentsByClassroom($classroom->id, 'active');
-
-        $data = $students->map(function ($student) {
-            return [
-                'id' => $student->id,
-                'nis' => $student->nis ?? '-',
-                'nisn' => $student->nisn ?? '-',
-                'name' => $student->user?->name ?? 'Siswa #'.$student->id,
-                'gender' => $student->gender ?? '-',
-                'academic_status' => $student->academic_status ?? 'active',
-                'profile_picture' => $student->profile_picture,
-            ];
-        });
-
-        return response()->json([
-            'success' => true,
-            'classroom' => [
-                'id' => $classroom->id,
-                'name' => $classroom->name,
-                'level' => $classroom->level,
-                'major' => $classroom->major,
-                'academic_year' => $classroom->academic_year,
-            ],
-            'total' => $data->count(),
-            'students' => $data,
+        return response()->view('admin.classrooms.components.promotion.student-rows', [
+            'students' => $this->classroomService->getStudentsByClassroom($classroom->id, 'active'),
         ]);
     }
 
@@ -148,12 +133,27 @@ class ClassroomController extends Controller
      */
     public function processPromotion(ProcessClassPromotionRequest $request): RedirectResponse
     {
-        $result = $this->classroomService->processPromotion($request->validated());
+        $batch = $this->classroomService->processPromotion($request->validated(), $request->user());
 
-        if ($result['action'] === 'promote') {
-            $message = "Sukses! Sebanyak {$result['processed_count']} siswa dari {$result['source_class']} berhasil dipromosikan ke {$result['target_class']}.";
-        } else {
-            $message = "Sukses! Sebanyak {$result['processed_count']} siswa dari {$result['source_class']} telah diproses status kelulusannya.";
+        $message = $batch->action === PromotionBatch::ACTION_PROMOTE
+            ? "Sukses! Sebanyak {$batch->student_count} siswa dari {$batch->source_classroom_name} berhasil dipromosikan ke {$batch->target_classroom_name}."
+            : "Sukses! Sebanyak {$batch->student_count} siswa dari {$batch->source_classroom_name} telah diproses status kelulusannya.";
+
+        return redirect()->route('admin.classrooms.promotion')
+            ->with('success', $message);
+    }
+
+    /**
+     * Membatalkan satu batch kenaikan kelas / kelulusan.
+     */
+    public function revertPromotion(Request $request, PromotionBatch $promotionBatch): RedirectResponse
+    {
+        $result = $this->classroomService->revertBatch($promotionBatch, $request->user());
+
+        $message = "Batch {$promotionBatch->actionLabel()} dari {$promotionBatch->source_classroom_name} dibatalkan: {$result['restored']} siswa dikembalikan.";
+
+        if ($result['skipped'] > 0) {
+            $message .= " {$result['skipped']} siswa dilewati karena datanya sudah berubah sejak batch dijalankan.";
         }
 
         return redirect()->route('admin.classrooms.promotion')

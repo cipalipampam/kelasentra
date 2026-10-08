@@ -69,6 +69,17 @@ class AcademicYear extends Model
     }
 
     /**
+     * Nama tahun ajaran yang sedang aktif, atau null bila belum ada.
+     */
+    public static function activeName(): ?string
+    {
+        return static::query()
+            ->where('status', self::STATUS_ACTIVE)
+            ->orderByDesc('name')
+            ->value('name');
+    }
+
+    /**
      * Nama tahun ajaran yang masih boleh dipakai untuk rombel baru.
      *
      * @return list<string>

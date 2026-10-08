@@ -333,8 +333,8 @@ class ClassroomRulesTest extends TestCase
     public function test_promotion_is_rejected_when_target_classroom_exceeds_capacity(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
 
         // Target sudah berisi kapasitas maksimal - 1 siswa.
         for ($i = 0; $i < Classroom::studentCapacity() - 1; $i++) {
@@ -358,8 +358,8 @@ class ClassroomRulesTest extends TestCase
     public function test_promotion_is_allowed_exactly_up_to_capacity(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
 
         for ($i = 0; $i < Classroom::studentCapacity() - 2; $i++) {
             $this->createStudentIn($target, $i);
