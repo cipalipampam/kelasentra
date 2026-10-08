@@ -18,6 +18,11 @@ return new class extends Migration
             $table->foreignId('target_classroom_id')->nullable()->constrained('classrooms')->nullOnDelete();
             $table->string('target_classroom_name', 50)->nullable();
             $table->string('target_academic_year', 20)->nullable();
+            // Rombel asal yang habis siswanya ditutup, sehingga wali kelasnya
+            // dilepas. Namanya disimpan di sini agar riwayat tidak hilang.
+            $table->boolean('source_classroom_closed')->default(false);
+            $table->foreignId('homeroom_teacher_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->string('homeroom_teacher_name', 100)->nullable();
             $table->foreignId('performed_by')->nullable()->constrained('users')->nullOnDelete();
             $table->string('performed_by_name', 100);
             $table->unsignedSmallInteger('student_count')->default(0);
