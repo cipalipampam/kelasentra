@@ -109,6 +109,68 @@ class ClassroomRulesTest extends TestCase
         $this->assertSame(2, Classroom::query()->where('name', 'X MIPA 1')->count());
     }
 
+    // ── Nomor sesi unik per tingkat + jurusan + tahun ajaran ─────────────────
+
+    public function test_session_number_must_be_unique_within_the_same_level_and_year(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027');
+        $this->createClassroom(['name' => 'X MIPA 1', 'section' => '1']);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.classrooms.store'), $this->validPayload(['name' => 'X MIPA 1A', 'section' => '1']));
+
+        $response->assertSessionHasErrors('section');
+        $this->assertSame(1, Classroom::query()->where('section', '1')->count());
+    }
+
+    public function test_same_session_number_is_allowed_for_a_different_major(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027');
+        $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'major' => 'MIPA', 'section' => '1']);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.classrooms.store'), $this->validPayload([
+                'name' => 'X IPS 1',
+                'major' => 'IPS',
+                'section' => '1',
+            ]));
+
+        $response->assertSessionHasNoErrors()->assertRedirect(route('admin.classrooms.index'));
+        $this->assertSame(2, Classroom::query()->where('section', '1')->count());
+    }
+
+    public function test_same_session_number_is_allowed_in_a_different_academic_year(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027');
+        $this->createAcademicYear('2027/2028', AcademicYear::STATUS_UPCOMING);
+        $this->createClassroom(['name' => 'X MIPA 1', 'academic_year' => '2026/2027']);
+
+        $response = $this->actingAs($admin)
+            ->post(route('admin.classrooms.store'), $this->validPayload(['academic_year' => '2027/2028']));
+
+        $response->assertSessionHasNoErrors()->assertRedirect(route('admin.classrooms.index'));
+        $this->assertSame(2, Classroom::query()->where('section', '1')->count());
+    }
+
+    public function test_classroom_can_keep_its_own_session_number_when_updated(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027');
+        $classroom = $this->createClassroom(['name' => 'X MIPA 1', 'section' => '1']);
+
+        $response = $this->actingAs($admin)
+            ->put(route('admin.classrooms.update', $classroom->id), $this->validPayload([
+                'name' => 'X MIPA 1',
+                'section' => '1',
+            ]));
+
+        $response->assertSessionHasNoErrors();
+        $this->assertSame('1', $classroom->fresh()->section);
+    }
+
     // ── Rule 2: jurusan enum, wajib untuk XI/XII ─────────────────────────────
 
     public function test_major_is_required_for_level_11_and_12(): void

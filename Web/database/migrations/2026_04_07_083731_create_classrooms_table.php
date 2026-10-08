@@ -25,6 +25,10 @@ return new class extends Migration
             // Nama rombel unik per tahun ajaran.
             $table->unique(['name', 'academic_year'], 'classrooms_name_academic_year_unique');
 
+            // Satu nomor sesi hanya boleh dipakai sekali per tingkat + jurusan + tahun ajaran,
+            // agar penomoran sesi otomatis tetap dapat diandalkan.
+            $table->unique(['level', 'major', 'section', 'academic_year'], 'classrooms_session_unique');
+
             // Satu guru hanya boleh menjadi wali kelas pada satu rombel per tahun ajaran.
             $table->unique(['homeroom_teacher_id', 'academic_year'], 'classrooms_homeroom_academic_year_unique');
         });
