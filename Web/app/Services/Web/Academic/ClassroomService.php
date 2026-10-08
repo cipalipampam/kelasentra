@@ -2,8 +2,11 @@
 
 namespace App\Services\Web\Academic;
 
+use App\Models\AcademicYear;
 use App\Models\AppNotification;
 use App\Models\Classroom;
+use App\Models\PromotionBatch;
+use App\Models\PromotionBatchItem;
 use App\Models\Student;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -50,6 +53,71 @@ class ClassroomService
             ->get();
     }
 
+    /**
+     * Daftar rombel tahun ajaran aktif, terurut tingkat → jurusan → sesi.
+     * Dipakai untuk filter dan tampilan, termasuk rombel yang sudah penuh.
+     */
+    public function getActiveYearClassrooms(): Collection
+    {
+        $academicYear = AcademicYear::activeName();
+
+        if (! $academicYear) {
+            return new Collection;
+        }
+
+        return $this->sortByLevelMajorSection(
+            Classroom::query()
+                ->where('academic_year', $academicYear)
+                ->where('is_active', true)
+                ->with(['homeroomTeacher:id,name'])
+                ->withCount([
+                    'students as active_students_count' => fn ($query) => $query->where('academic_status', 'active'),
+                ])
+                ->get()
+        );
+    }
+
+    /**
+     * Rombel yang masih boleh menerima siswa baru, yaitu rombel aktif pada
+     * tahun ajaran aktif yang kursinya belum habis.
+     *
+     * $includeClassroomId menahan rombel siswa yang sedang diedit agar tetap
+     * bisa dipilih walau sudah penuh atau berasal dari tahun ajaran lama.
+     */
+    public function getEnrollableClassrooms(?int $includeClassroomId = null): Collection
+    {
+        $classrooms = $this->getActiveYearClassrooms()
+            ->filter(fn (Classroom $classroom) => $classroom->active_students_count < $classroom->maxStudents());
+
+        if ($includeClassroomId && ! $classrooms->contains('id', $includeClassroomId)) {
+            $current = Classroom::query()
+                ->with(['homeroomTeacher:id,name'])
+                ->withCount([
+                    'students as active_students_count' => fn ($query) => $query->where('academic_status', 'active'),
+                ])
+                ->find($includeClassroomId);
+
+            if ($current) {
+                $classrooms->push($current);
+            }
+        }
+
+        return $this->sortByLevelMajorSection($classrooms);
+    }
+
+    private function sortByLevelMajorSection(Collection $classrooms): Collection
+    {
+        $majorRank = array_flip(config('classroom.majors', []));
+
+        return $classrooms
+            ->sortBy(fn (Classroom $classroom) => [
+                (string) $classroom->level,
+                $majorRank[$classroom->major] ?? PHP_INT_MAX,
+                (string) $classroom->section,
+            ])
+            ->values();
+    }
+
     public function getEligibleHomeroomTeachers(): Collection
     {
         // Hanya guru berstatus aktif yang boleh ditunjuk sebagai wali kelas.
@@ -72,6 +140,36 @@ class ClassroomService
             ->get(['homeroom_teacher_id', 'academic_year'])
             ->groupBy('homeroom_teacher_id')
             ->map(fn ($rows) => $rows->pluck('academic_year')->unique()->values()->all())
+            ->all();
+    }
+
+    /**
+     * Ringkasan tiap kelompok sesi rombel (tingkat + jurusan + tahun ajaran)
+     * beserta jumlah siswa aktif dan sisa kursinya.
+     *
+     * Dipakai form tambah rombel untuk mengusulkan nomor sesi: sesi baru
+     * hanya diusulkan ketika sesi terakhir pada kelompok itu sudah penuh.
+     *
+     * @return array<string, list<array{section: string, active_students: int, remaining: int, is_full: bool}>>
+     */
+    public function getSectionOverview(): array
+    {
+        return Classroom::query()
+            ->withCount([
+                'students as active_students_count' => fn ($query) => $query->where('academic_status', 'active'),
+            ])
+            ->get(['id', 'level', 'major', 'academic_year', 'section'])
+            ->groupBy(fn (Classroom $classroom) => $classroom->sectionKey())
+            ->map(fn (Collection $classrooms) => $classrooms
+                ->sortBy(fn (Classroom $classroom) => $classroom->hasNumericSection() ? (int) $classroom->section : PHP_INT_MAX)
+                ->map(fn (Classroom $classroom) => [
+                    'section' => (string) $classroom->section,
+                    'active_students' => $classroom->active_students_count,
+                    'remaining' => max(0, $classroom->maxStudents() - $classroom->active_students_count),
+                    'is_full' => $classroom->active_students_count >= $classroom->maxStudents(),
+                ])
+                ->values()
+                ->all())
             ->all();
     }
 
@@ -112,91 +210,200 @@ class ClassroomService
 
     /**
      * Memproses kenaikan kelas massal atau kelulusan siswa terpilih.
+     *
+     * Aturan bisnis (kenaikan bertahap satu tingkat, jurusan tidak berubah,
+     * kapasitas rombel, dan tingkat yang boleh lulus) ditegakkan di sini
+     * agar berlaku untuk semua jalur pemanggil, bukan hanya form admin.
      */
-    public function processPromotion(array $data): array
+    public function processPromotion(array $data, User $actor): PromotionBatch
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $actor) {
             $action = $data['action'];
-            $sourceClassroomId = (int) $data['source_classroom_id'];
-            $targetClassroomId = ! empty($data['target_classroom_id']) ? (int) $data['target_classroom_id'] : null;
-            $studentIds = $data['student_ids'] ?? [];
+            $sourceClass = Classroom::findOrFail($data['source_classroom_id']);
+            $targetClass = ! empty($data['target_classroom_id'])
+                ? Classroom::findOrFail($data['target_classroom_id'])
+                : null;
 
-            $sourceClass = Classroom::findOrFail($sourceClassroomId);
-            $targetClass = $targetClassroomId ? Classroom::findOrFail($targetClassroomId) : null;
+            $studentIds = array_values(array_unique($data['student_ids'] ?? []));
 
-            // Ambil siswa yang valid dan memang berada di sourceClassroom
+            // Hanya siswa yang masih aktif di rombel asal yang boleh diproses.
             $students = Student::with('user')
                 ->whereIn('id', $studentIds)
-                ->where('classroom_id', $sourceClassroomId)
+                ->where('classroom_id', $sourceClass->id)
+                ->where('academic_status', 'active')
                 ->get();
 
-            // Kapasitas rombel tujuan tidak boleh terlampaui.
-            if ($action === 'promote' && $targetClass && $students->isNotEmpty() && ! $targetClass->hasRoomFor($students->count())) {
+            if ($students->count() !== count($studentIds)) {
                 throw ValidationException::withMessages([
-                    'target_classroom_id' => sprintf(
-                        'Kelas tujuan %s hanya menyisakan %d kursi, sedangkan %d siswa akan dipindahkan. Kapasitas maksimal %d siswa per rombel.',
-                        $targetClass->name,
-                        $targetClass->remainingCapacity(),
-                        $students->count(),
-                        $targetClass->maxStudents(),
-                    ),
+                    'student_ids' => 'Sebagian siswa terpilih sudah tidak aktif di rombel asal. Muat ulang halaman lalu pilih kembali.',
                 ]);
             }
 
-            $processedCount = 0;
+            if ($students->isEmpty()) {
+                throw ValidationException::withMessages([
+                    'student_ids' => 'Tidak ada siswa aktif yang dapat diproses.',
+                ]);
+            }
+
+            $isPromotion = $action === PromotionBatch::ACTION_PROMOTE;
+
+            $blockReason = $isPromotion
+                ? $sourceClass->promotionBlockReason($targetClass, $students->count())
+                : $sourceClass->graduationBlockReason();
+
+            if ($blockReason !== null) {
+                throw ValidationException::withMessages([
+                    $isPromotion ? 'target_classroom_id' : 'source_classroom_id' => $blockReason,
+                ]);
+            }
+
+            $batch = PromotionBatch::create([
+                'action' => $action,
+                'source_classroom_id' => $sourceClass->id,
+                'source_classroom_name' => $sourceClass->name,
+                'source_academic_year' => $sourceClass->academic_year,
+                'target_classroom_id' => $targetClass?->id,
+                'target_classroom_name' => $targetClass?->name,
+                'target_academic_year' => $targetClass?->academic_year,
+                'performed_by' => $actor->id,
+                'performed_by_name' => $actor->name,
+                'student_count' => $students->count(),
+            ]);
+
+            $now = now();
+            $itemRows = [];
 
             foreach ($students as $student) {
-                if ($action === 'promote' && $targetClass) {
-                    $student->update([
-                        'classroom_id' => $targetClass->id,
-                        'grade' => $targetClass->name,
-                        'academic_status' => 'active',
-                    ]);
+                $itemRows[] = [
+                    'promotion_batch_id' => $batch->id,
+                    'student_id' => $student->id,
+                    'student_name' => $student->user?->name ?? 'Siswa #'.$student->id,
+                    'student_nis' => $student->nis,
+                    'from_classroom_id' => $student->classroom_id,
+                    'from_classroom_name' => $sourceClass->name,
+                    'from_grade' => $student->getRawOriginal('grade'),
+                    'from_academic_status' => $student->academic_status,
+                    'to_classroom_id' => $isPromotion ? $targetClass->id : null,
+                    'to_academic_status' => $isPromotion ? 'active' : 'graduated',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
 
-                    if ($student->user_id) {
-                        AppNotification::create([
-                            'user_id' => $student->user_id,
-                            'title' => 'Kenaikan Kelas Baru',
-                            'body' => "Selamat, Anda telah dipindahkan ke rombel {$targetClass->name} untuk tahun ajaran {$targetClass->academic_year}.",
-                            'type' => 'announcement',
-                            'data' => [
+                $student->update([
+                    'classroom_id' => $isPromotion ? $targetClass->id : null,
+                    'grade' => $isPromotion ? $targetClass->name : $student->grade,
+                    'academic_status' => $isPromotion ? 'active' : 'graduated',
+                ]);
+
+                // Dibuat satu per satu, bukan bulk insert, karena model
+                // memancarkan event realtime saat notifikasi dibuat.
+                if ($student->user_id) {
+                    AppNotification::create([
+                        'user_id' => $student->user_id,
+                        'title' => $isPromotion ? 'Kenaikan Kelas Baru' : 'Kelulusan Siswa',
+                        'body' => $isPromotion
+                            ? "Selamat, Anda telah dipindahkan ke rombel {$targetClass->name} untuk tahun ajaran {$targetClass->academic_year}."
+                            : "Status akademik Anda telah diperbarui menjadi Alumni (Lulus) dari rombel {$sourceClass->name}.",
+                        'type' => 'announcement',
+                        'data' => $isPromotion
+                            ? [
                                 'action' => 'class_promotion',
                                 'classroom_id' => $targetClass->id,
                                 'classroom_name' => $targetClass->name,
-                            ],
-                            'is_read' => false,
-                        ]);
-                    }
-                } elseif ($action === 'graduate') {
-                    $student->update([
-                        'classroom_id' => null,
-                        'academic_status' => 'graduated',
-                    ]);
-
-                    if ($student->user_id) {
-                        AppNotification::create([
-                            'user_id' => $student->user_id,
-                            'title' => 'Kelulusan Siswa',
-                            'body' => "Status akademik Anda telah diperbarui menjadi Alumni (Lulus) dari rombel {$sourceClass->name}.",
-                            'type' => 'announcement',
-                            'data' => [
+                            ]
+                            : [
                                 'action' => 'graduation',
                                 'previous_classroom_id' => $sourceClass->id,
                             ],
-                            'is_read' => false,
-                        ]);
-                    }
+                        'is_read' => false,
+                    ]);
                 }
-
-                $processedCount++;
             }
 
-            return [
-                'action' => $action,
-                'source_class' => $sourceClass->name,
-                'target_class' => $targetClass?->name ?? 'Alumni / Lulus',
-                'processed_count' => $processedCount,
-            ];
+            // Jejak audit ditulis sekali untuk seluruh siswa.
+            PromotionBatchItem::insert($itemRows);
+
+            return $batch;
+        });
+    }
+
+    /**
+     * Riwayat eksekusi promosi terbaru untuk ditampilkan pada halaman admin.
+     */
+    public function getPromotionHistory(int $limit = 10): Collection
+    {
+        return PromotionBatch::query()
+            ->withCount('items')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * Mengembalikan seluruh siswa pada satu batch ke kondisi sebelum diproses.
+     *
+     * Siswa yang datanya sudah berubah lagi setelah batch berjalan dilewati
+     * agar pembatalan tidak menimpa perubahan yang lebih baru.
+     *
+     * @return array{restored: int, skipped: int}
+     */
+    public function revertBatch(PromotionBatch $batch, User $actor): array
+    {
+        if ($batch->isReverted()) {
+            throw ValidationException::withMessages([
+                'promotion_batch' => 'Batch ini sudah pernah dibatalkan sebelumnya.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($batch, $actor) {
+            $batch->load('items.student');
+
+            $restored = 0;
+            $skipped = 0;
+
+            foreach ($batch->items as $item) {
+                $student = $item->student;
+
+                if ($student === null
+                    || (int) $student->classroom_id !== (int) $item->to_classroom_id
+                    || $student->academic_status !== $item->to_academic_status) {
+                    $skipped++;
+
+                    continue;
+                }
+
+                $student->update([
+                    'classroom_id' => $item->from_classroom_id,
+                    'grade' => $item->from_grade,
+                    'academic_status' => $item->from_academic_status,
+                ]);
+
+                if ($student->user_id) {
+                    AppNotification::create([
+                        'user_id' => $student->user_id,
+                        'title' => 'Koreksi Data Akademik',
+                        'body' => $batch->action === PromotionBatch::ACTION_PROMOTE
+                            ? "Penempatan rombel Anda dikembalikan ke {$item->from_classroom_name}."
+                            : 'Status kelulusan Anda dibatalkan dan dikembalikan ke status sebelumnya.',
+                        'type' => 'announcement',
+                        'data' => [
+                            'action' => 'promotion_reverted',
+                            'promotion_batch_id' => $batch->id,
+                        ],
+                        'is_read' => false,
+                    ]);
+                }
+
+                $restored++;
+            }
+
+            $batch->update([
+                'reverted_at' => now(),
+                'reverted_by' => $actor->id,
+                'reverted_by_name' => $actor->name,
+            ]);
+
+            return ['restored' => $restored, 'skipped' => $skipped];
         });
     }
 }
