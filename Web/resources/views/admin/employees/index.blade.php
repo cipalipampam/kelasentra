@@ -84,6 +84,7 @@
                             <th>NIP</th>
                             <th>Jabatan / Posisi</th>
                             <th>Klasifikasi</th>
+                            <th>Status</th>
                             <th>Kontak & Email</th>
                             <th class="text-end pe-4">Aksi</th>
                         </tr>
@@ -140,6 +141,23 @@
                                     @endif
                                 </td>
                                 <td>
+                                    @php
+                                        $employmentStatus = $user->employee->employment_status ?? null;
+                                        $statusLabels = \App\Models\Employee::statusLabels();
+                                    @endphp
+                                    @if($employmentStatus === \App\Models\Employee::STATUS_ACTIVE)
+                                        <span class="badge-status badge-present">
+                                            <i class="bi bi-check-circle me-1"></i>Aktif
+                                        </span>
+                                    @elseif($employmentStatus === null)
+                                        <span class="text-muted small">-</span>
+                                    @else
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1" style="font-size: 0.72rem;">
+                                            <i class="bi bi-pause-circle me-1"></i>{{ $statusLabels[$employmentStatus] ?? $employmentStatus }}
+                                        </span>
+                                    @endif
+                                </td>
+                                <td>
                                     <div class="text-secondary small">
                                         <i class="bi bi-envelope me-1 text-muted"></i>{{ $user->email }}
                                     </div>
@@ -167,7 +185,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center py-5">
+                                <td colspan="8" class="text-center py-5">
                                     <div class="mb-3 text-muted"><i class="bi bi-person-x fs-1"></i></div>
                                     <h6 class="text-dark fw-medium">Belum Ada Data Pegawai</h6>
                                     <p class="text-muted small mb-3">Tidak ditemukan data pegawai yang sesuai dengan kriteria filter.</p>
