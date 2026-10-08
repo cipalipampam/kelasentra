@@ -33,83 +33,118 @@
         </div>
 
         <div class="py-3 grow overflow-y-auto">
-            <p class="sidebar-section-header text-white-50 px-3 mb-2" style="font-size:0.65rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;">Navigasi Utama</p>
-            <ul class="nav nav-pills flex-column mb-auto">
-                <li class="nav-item">
-                    <a href="{{ route('admin.dashboard') }}"
-                        class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" title="Dashboard">
-                        <i class="bi bi-grid-1x2-fill"></i>
-                        <span class="link-text">Dashboard</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.students.index') }}"
-                        class="nav-link {{ request()->routeIs('admin.students.*') ? 'active' : '' }}" title="Data Siswa">
-                        <i class="bi bi-mortarboard-fill"></i>
-                        <span class="link-text">Data Siswa</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.employees.index') }}"
-                        class="nav-link {{ request()->routeIs('admin.employees.*') ? 'active' : '' }}" title="Data Karyawan & Guru">
-                        <i class="bi bi-person-badge-fill"></i>
-                        <span class="link-text">Guru & Karyawan</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.classrooms.index') }}"
-                        class="nav-link {{ request()->routeIs('admin.classrooms.*') ? 'active' : '' }}" title="Data Rombel & Kelas">
-                        <i class="bi bi-diagram-3-fill"></i>
-                        <span class="link-text">Rombel & Kelas</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.subjects.index') }}"
-                        class="nav-link {{ request()->routeIs('admin.subjects.*') ? 'active' : '' }}" title="Mata Pelajaran">
-                        <i class="bi bi-journal-bookmark-fill"></i>
-                        <span class="link-text">Mata Pelajaran</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.schedules.index') }}"
-                        class="nav-link {{ request()->routeIs('admin.schedules.*') ? 'active' : '' }}" title="Jadwal Pelajaran">
-                        <i class="bi bi-calendar3"></i>
-                        <span class="link-text">Jadwal Pelajaran</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.attendances.students') }}"
-                        class="nav-link {{ request()->routeIs('admin.attendances.students') ? 'active' : '' }}" title="Presensi Siswa">
-                        <i class="bi bi-calendar-check-fill"></i>
-                        <span class="link-text">Presensi Siswa</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.attendances.employees') }}"
-                        class="nav-link {{ request()->routeIs('admin.attendances.employees') ? 'active' : '' }}" title="Presensi Karyawan">
-                        <i class="bi bi-calendar2-check-fill"></i>
-                        <span class="link-text">Presensi Guru & Staff</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a href="{{ route('admin.announcements.index') }}"
-                        class="nav-link {{ request()->routeIs('admin.announcements.*') ? 'active' : '' }}" title="Pengumuman">
-                        <i class="bi bi-megaphone-fill"></i>
-                        <span class="link-text">Pengumuman</span>
-                    </a>
-                </li>
-            </ul>
 
-            <p class="sidebar-section-header text-white-50 px-3 mb-2 mt-4" style="font-size:0.65rem; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;">Konfigurasi</p>
-            <ul class="nav nav-pills flex-column">
-                <li class="nav-item">
-                    <a href="{{ route('admin.settings.index') }}"
-                        class="nav-link {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}" title="Pengaturan Sistem">
-                        <i class="bi bi-gear-fill"></i>
-                        <span class="link-text">Pengaturan Sistem</span>
-                    </a>
-                </li>
-            </ul>
+            {{-- ==================== UTAMA ==================== --}}
+            <div class="sidebar-section">
+                <p class="sidebar-section-header text-white-50">Utama</p>
+                <ul class="nav nav-pills flex-column">
+                    <li class="nav-item">
+                        <a href="{{ route('admin.dashboard') }}"
+                            class="nav-link {{ request()->routeIs('admin.dashboard') ? 'active' : '' }}" title="Dashboard">
+                            <i class="bi bi-grid-1x2-fill"></i>
+                            <span class="link-text">Dashboard</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            {{-- ==================== AKADEMIK ==================== --}}
+            <div class="sidebar-section">
+                <p class="sidebar-section-header text-white-50">Akademik</p>
+                <ul class="nav nav-pills flex-column">
+                    <li class="nav-item">
+                        <a href="{{ route('admin.classrooms.index') }}"
+                            class="nav-link {{ request()->routeIs('admin.classrooms.*') ? 'active' : '' }}" title="Data Rombel & Kelas">
+                            <i class="bi bi-diagram-3-fill"></i>
+                            <span class="link-text">Rombel & Kelas</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ route('admin.subjects.index') }}"
+                            class="nav-link {{ request()->routeIs('admin.subjects.*') ? 'active' : '' }}" title="Mata Pelajaran">
+                            <i class="bi bi-journal-bookmark-fill"></i>
+                            <span class="link-text">Mata Pelajaran</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ route('admin.schedules.index') }}"
+                            class="nav-link {{ request()->routeIs('admin.schedules.*') ? 'active' : '' }}" title="Jadwal Pelajaran">
+                            <i class="bi bi-calendar3"></i>
+                            <span class="link-text">Jadwal Pelajaran</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            {{-- ============ KESISWAAN & KEPEGAWAIAN ============ --}}
+            <div class="sidebar-section">
+                <p class="sidebar-section-header text-white-50">Kesiswaan & Kepegawaian</p>
+                <ul class="nav nav-pills flex-column">
+                    <li class="nav-item">
+                        <a href="{{ route('admin.students.index') }}"
+                            class="nav-link {{ request()->routeIs('admin.students.*') ? 'active' : '' }}" title="Data Siswa">
+                            <i class="bi bi-mortarboard-fill"></i>
+                            <span class="link-text">Data Siswa</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ route('admin.employees.index') }}"
+                            class="nav-link {{ request()->routeIs('admin.employees.*') ? 'active' : '' }}" title="Data Karyawan & Guru">
+                            <i class="bi bi-person-badge-fill"></i>
+                            <span class="link-text">Guru & Karyawan</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            {{-- ==================== PRESENSI ==================== --}}
+            <div class="sidebar-section">
+                <p class="sidebar-section-header text-white-50">Presensi</p>
+                <ul class="nav nav-pills flex-column">
+                    <li class="nav-item">
+                        <a href="{{ route('admin.attendances.students') }}"
+                            class="nav-link {{ request()->routeIs('admin.attendances.students') ? 'active' : '' }}" title="Presensi Siswa">
+                            <i class="bi bi-calendar-check-fill"></i>
+                            <span class="link-text">Presensi Siswa</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{{ route('admin.attendances.employees') }}"
+                            class="nav-link {{ request()->routeIs('admin.attendances.employees') ? 'active' : '' }}" title="Presensi Karyawan">
+                            <i class="bi bi-calendar2-check-fill"></i>
+                            <span class="link-text">Presensi Guru & Staff</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            {{-- ==================== KOMUNIKASI ==================== --}}
+            <div class="sidebar-section">
+                <p class="sidebar-section-header text-white-50">Komunikasi</p>
+                <ul class="nav nav-pills flex-column">
+                    <li class="nav-item">
+                        <a href="{{ route('admin.announcements.index') }}"
+                            class="nav-link {{ request()->routeIs('admin.announcements.*') ? 'active' : '' }}" title="Pengumuman">
+                            <i class="bi bi-megaphone-fill"></i>
+                            <span class="link-text">Pengumuman</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            {{-- ==================== KONFIGURASI ==================== --}}
+            <div class="sidebar-section">
+                <p class="sidebar-section-header text-white-50">Konfigurasi</p>
+                <ul class="nav nav-pills flex-column">
+                    <li class="nav-item">
+                        <a href="{{ route('admin.settings.index') }}"
+                            class="nav-link {{ request()->routeIs('admin.settings.*') ? 'active' : '' }}" title="Pengaturan Sistem">
+                            <i class="bi bi-gear-fill"></i>
+                            <span class="link-text">Pengaturan Sistem</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
         </div>
 
         <!-- Hidden logout form -->
