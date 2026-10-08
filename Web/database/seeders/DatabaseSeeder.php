@@ -2,7 +2,14 @@
 
 namespace Database\Seeders;
 
+use App\Models\AcademicYear;
+use App\Models\Attendance;
+use App\Models\Classroom;
+use App\Models\Schedule;
+use App\Models\ScheduleAttendance;
 use App\Models\Setting;
+use App\Models\Student;
+use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -30,31 +37,34 @@ class DatabaseSeeder extends Seeder
         // 3. Master Mata Pelajaran (10 mapel lengkap kode, rumpun, dan warna aksen)
         $this->call([SubjectSeeder::class]);
 
-        // 4. Guru & Staff Pegawai (6 guru + 2 staff, lengkap dengan mapel yang diampu)
+        // 4. Guru & Staff Pegawai (10 guru + 2 staff, lengkap dengan mapel yang diampu)
         $this->call([EmployeeSeeder::class]);
 
-        // 5. Master Rombel & Kelas (Tingkat 10, 11, 12 lengkap wali kelas)
+        // 5. Master Tahun Ajaran (3 periode: arsip, aktif, dan akan datang)
+        $this->call([AcademicYearSeeder::class]);
+
+        // 6. Master Rombel (9 rombel per tahun ajaran: X/XI/XII × MIPA/IPS/BAHASA)
         $this->call([ClassroomSeeder::class]);
 
-        // 6. Siswa (24 siswa: 20 aktif tersebar di rombel + 4 alumni)
+        // 7. Siswa (12 siswa per rombel tahun ajaran aktif + alumni lulusan)
         $this->call([StudentSeeder::class]);
 
-        // 7. Jadwal Pelajaran Mingguan Anti-Bentrok (Senin-Jumat)
+        // 8. Jadwal Pelajaran Mingguan Anti-Bentrok (Senin-Jumat, rombel tahun ajaran aktif)
         $this->call([ScheduleSeeder::class]);
 
-        // 8. Riwayat Absensi Presensi Mata Pelajaran di Kelas
+        // 9. Riwayat Absensi Presensi Mata Pelajaran di Kelas
         $this->call([ScheduleAttendanceSeeder::class]);
 
-        // 9. Riwayat Presensi Gerbang Harian (14 hari terakhir)
+        // 10. Riwayat Presensi Gerbang Harian (14 hari terakhir)
         $this->call([AttendanceSeeder::class]);
 
-        // 10. Pengumuman Sekolah Aktif
+        // 11. Pengumuman Sekolah Aktif
         $this->call([AnnouncementSeeder::class]);
 
-        // 11. Notifikasi Pengguna (Siswa & Guru)
+        // 12. Notifikasi Pengguna (Siswa & Guru)
         $this->call([AppNotificationSeeder::class]);
 
-        // 12. Settings Lengkap Sekolah
+        // 13. Settings Lengkap Sekolah
         $settings = [
             // Lokasi sekolah (default koordinat Kelasentra)
             'school_lat' => '-6.200000',
@@ -83,20 +93,42 @@ class DatabaseSeeder extends Seeder
         }
         $this->command->info('✅ Settings lengkap sekolah berhasil di-seed.');
 
+        $this->printSummary();
+    }
+
+    /**
+     * Ringkasan data hasil seeding beserta akun demo yang siap dipakai.
+     */
+    private function printSummary(): void
+    {
+        $line = str_repeat('═', 64);
+        $activeYear = AcademicYear::query()
+            ->where('status', AcademicYear::STATUS_ACTIVE)
+            ->orderByDesc('name')
+            ->value('name');
+
         $this->command->info('');
-        $this->command->info('═══════════════════════════════════════════════════════════');
-        $this->command->info('  🎉 SEEDING LENGKAP SELESAI! AKUN SIAP DIGUNAKAN:');
-        $this->command->info('  • Admin  : admin@sekolah.com / admin123');
-        $this->command->info('  • Guru 1 : hendra.kusuma@sekolah.sch.id / password123 (Matematika)');
-        $this->command->info('  • Guru 2 : sari.dewantari@sekolah.sch.id / password123 (B. Indonesia)');
-        $this->command->info('  • Guru 3 : antonius.wibowo@sekolah.sch.id / password123 (Informatika)');
-        $this->command->info('  • Guru 4 : ratna.permata@sekolah.sch.id / password123 (B. Inggris)');
-        $this->command->info('  • Guru 5 : bambang.sutrisno@sekolah.sch.id / password123 (Fisika)');
-        $this->command->info('  • Guru 6 : siti.khadijah@sekolah.sch.id / password123 (PAI)');
-        $this->command->info('  • Staff  : agus.triyono@sekolah.sch.id / password123 (Tata Usaha)');
-        $this->command->info('  • Siswa  : ahmad.rizki@siswa.sch.id / password123 (X-MIPA 1)');
-        $this->command->info('  • Siswa  : dimas.arya@siswa.sch.id / password123 (XI-MIPA 1)');
-        $this->command->info('  • Siswa  : fajar.alfian@siswa.sch.id / password123 (XII-MIPA 1)');
-        $this->command->info('═══════════════════════════════════════════════════════════');
+        $this->command->info($line);
+        $this->command->info('  🎉 SEEDING LENGKAP SELESAI — RINGKASAN DATA');
+        $this->command->info($line);
+        $this->command->info('  Tahun ajaran      : '.AcademicYear::query()->count().' (aktif: '.($activeYear ?? '-').')');
+        $this->command->info('  Rombel            : '.Classroom::query()->count());
+        $this->command->info('  Mata pelajaran    : '.Subject::query()->count());
+        $this->command->info('  Jadwal pelajaran  : '.Schedule::query()->count().' slot');
+        $this->command->info('  Guru              : '.User::query()->role('guru')->count());
+        $this->command->info('  Staff             : '.User::query()->role('staff')->count());
+        $this->command->info('  Siswa aktif       : '.Student::query()->where('academic_status', 'active')->count());
+        $this->command->info('  Alumni (lulus)    : '.Student::query()->where('academic_status', 'graduated')->count());
+        $this->command->info('  Absensi mapel     : '.ScheduleAttendance::query()->count().' rekaman');
+        $this->command->info('  Presensi gerbang  : '.Attendance::query()->count().' rekaman');
+        $this->command->info($line);
+        $this->command->info('  AKUN DEMO — kata sandi: password123 (admin: admin123)');
+        $this->command->info('  • Admin : admin@sekolah.com');
+        $this->command->info('  • Guru  : hendra.kusuma@sekolah.sch.id');
+        $this->command->info('  • Staff : agus.triyono@sekolah.sch.id');
+        $this->command->info('  • Siswa : ahmad.rizki@siswa.sch.id  (X-MIPA 1)');
+        $this->command->info('  • Siswa : dimas.arya@siswa.sch.id   (XI-MIPA 1)');
+        $this->command->info('  • Siswa : fajar.alfian@siswa.sch.id (XII-MIPA 1)');
+        $this->command->info($line);
     }
 }
