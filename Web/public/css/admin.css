@@ -224,6 +224,28 @@ body {
     flex-shrink: 0;
 }
 
+/* Sidebar section grouping */
+.sidebar-section-header {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0 1.25rem;
+    margin: 0 0 0.4rem;
+    white-space: nowrap;
+}
+
+.sidebar-section + .sidebar-section {
+    margin-top: 0.85rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.sidebar.collapsed .sidebar-section + .sidebar-section {
+    margin-top: 0.4rem;
+    padding-top: 0.5rem;
+}
+
 .sidebar.collapsed .link-text,
 .sidebar.collapsed .sidebar-logo-text,
 .sidebar.collapsed .sidebar-logo-full,
@@ -839,3 +861,32 @@ th.sortable a.active-sort {
 ::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
 }
+
+/* ===================================================
+   DASHBOARD REALTIME & PULSE ANIMATIONS
+   =================================================== */
+.pulse-dot {
+    width: 8px;
+    height: 8px;
+    background: #059669;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.7);
+    animation: pulseGlow 2s infinite;
+}
+
+@keyframes pulseGlow {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(5, 150, 105, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(5, 150, 105, 0); }
+}
+
+@keyframes wsSlideDown {
+    from { opacity: 0; transform: translateY(-8px); background-color: #eff6ff; }
+    to { opacity: 1; transform: translateY(0); background-color: transparent; }
+}
+
+.ws-new-row {
+    animation: wsSlideDown 0.6s ease;
+}
+
