@@ -98,18 +98,20 @@
                             @endfor
                         </select>
                     </div>
-                    <div class="{{ $attendanceType === 'siswa' ? 'col-lg-3' : 'col-lg-2' }} col-md-4" id="grade-filter-container" style="{{ $attendanceType === 'siswa' || request('role') == 'siswa' ? '' : 'display:none;' }}">
-                        <label for="grade" class="form-label text-dark small fw-semibold">Kelas</label>
-                        <select name="grade" id="grade" class="form-select">
-                            <option value="">Semua Kelas</option>
-                            @foreach($grades as $g)
-                                <option value="{{ $g }}" {{ request('grade') == $g ? 'selected' : '' }}>{{ $g }}</option>
+                    <div class="{{ $attendanceType === 'siswa' ? 'col-lg-3' : 'col-lg-2' }} col-md-4" id="classroom-filter-container" style="{{ $attendanceType === 'siswa' || request('role') == 'siswa' ? '' : 'display:none;' }}">
+                        <label for="classroom_id" class="form-label text-dark small fw-semibold">Rombel</label>
+                        <select name="classroom_id" id="classroom_id" class="form-select">
+                            <option value="">Semua Rombel</option>
+                            @foreach($classrooms as $classroom)
+                                <option value="{{ $classroom->id }}" {{ (string) request('classroom_id') === (string) $classroom->id ? 'selected' : '' }}>
+                                    {{ $classroom->name }}
+                                </option>
                             @endforeach
                         </select>
                     </div>
                     <div id="role-filter-container" class="{{ $attendanceType ? 'd-none' : (request('role') == 'siswa' ? 'col-lg-2' : 'col-lg-4') }} col-md-6">
                         <label for="role" class="form-label text-dark small fw-semibold">Filter Peran</label>
-                        <select name="role" id="role" class="form-select" onchange="toggleGradeFilter()">
+                        <select name="role" id="role" class="form-select" onchange="toggleClassroomFilter()">
                             <option value="">Semua Anggota</option>
                             <option value="siswa"    {{ request('role') == 'siswa'    ? 'selected' : '' }}>Siswa</option>
                             <option value="employee" {{ request('role') == 'employee' ? 'selected' : '' }}>Semua Pegawai</option>
@@ -302,7 +304,7 @@
                                 <td colspan="8" class="text-center py-5">
                                     <div class="mb-3 text-muted"><i class="bi bi-calendar-x fs-1"></i></div>
                                     <h6 class="text-dark fw-medium">Tidak Ada Catatan Presensi</h6>
-                                    <p class="text-muted small mb-0">Sesuaikan filter tanggal atau kelas untuk menemukan data yang dicari.</p>
+                                    <p class="text-muted small mb-0">Sesuaikan filter tanggal atau rombel untuk menemukan data yang dicari.</p>
                                 </td>
                             </tr>
                         @endforelse
@@ -352,17 +354,17 @@
 </div>
 
 <script>
-function toggleGradeFilter() {
+function toggleClassroomFilter() {
     const roleSelect = document.getElementById('role');
-    const gradeContainer = document.getElementById('grade-filter-container');
+    const classroomContainer = document.getElementById('classroom-filter-container');
     const roleContainer = document.getElementById('role-filter-container');
     if (roleSelect.value === 'siswa') {
-        gradeContainer.style.display = 'block';
+        classroomContainer.style.display = 'block';
         roleContainer.className = 'col-lg-2 col-md-6';
     } else {
-        gradeContainer.style.display = 'none';
+        classroomContainer.style.display = 'none';
         roleContainer.className = 'col-lg-4 col-md-6';
-        document.getElementById('grade').value = '';
+        document.getElementById('classroom_id').value = '';
     }
 }
 
