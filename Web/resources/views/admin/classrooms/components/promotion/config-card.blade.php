@@ -67,11 +67,20 @@
                             data-name="{{ $classroom->name }}"
                             data-level="{{ $classroom->level }}"
                             data-year="{{ $classroom->academic_year }}"
+                            data-remaining="{{ max(0, $studentCapacity - $classroom->active_students_count) }}"
+                            data-capacity="{{ $studentCapacity }}"
                             {{ old('target_classroom_id') == $classroom->id ? 'selected' : '' }}>
                             Tingkat {{ $classroom->level }} - {{ $classroom->name }} ({{ $classroom->academic_year }})
                         </option>
                     @endforeach
                 </select>
+                @error('target_classroom_id')
+                    <div class="form-text small text-danger">{{ $message }}</div>
+                @else
+                    <div class="form-text small text-muted" id="targetCapacityHint">
+                        Kapasitas maksimal {{ $studentCapacity }} siswa per rombel.
+                    </div>
+                @enderror
             </div>
         </div>
     </div>

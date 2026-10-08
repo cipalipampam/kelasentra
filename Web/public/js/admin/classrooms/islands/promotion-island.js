@@ -13,6 +13,7 @@ export function initPromotionIsland() {
     const targetContainer = document.getElementById('targetClassContainer');
     const actionPromote = document.getElementById('actionPromote');
     const actionGraduate = document.getElementById('actionGraduate');
+    const targetCapacityHint = document.getElementById('targetCapacityHint');
 
     const loadingIndicator = document.getElementById('loadingIndicator');
     const emptySelectClass = document.getElementById('emptySelectClass');
@@ -52,6 +53,29 @@ export function initPromotionIsland() {
         updateTargetLabels(text);
     }
 
+    // Tampilkan sisa kuota rombel tujuan agar admin sadar batas 30 siswa.
+    function updateTargetCapacityHint() {
+        if (!targetCapacityHint || !targetClassSelect) return;
+
+        const selectedOpt = targetClassSelect.options[targetClassSelect.selectedIndex];
+        const isGraduating = actionGraduate.checked;
+
+        if (!selectedOpt || !selectedOpt.value || isGraduating) {
+            targetCapacityHint.classList.remove('text-danger');
+            targetCapacityHint.classList.add('text-muted');
+            targetCapacityHint.textContent = 'Kapasitas maksimal 30 siswa per rombel.';
+            return;
+        }
+
+        const remaining = Number(selectedOpt.dataset.remaining ?? 0);
+        const capacity = Number(selectedOpt.dataset.capacity ?? 30);
+        const name = selectedOpt.dataset.name || selectedOpt.text;
+
+        targetCapacityHint.textContent = `Sisa kursi ${name}: ${remaining} dari ${capacity}.`;
+        targetCapacityHint.classList.toggle('text-danger', remaining === 0);
+        targetCapacityHint.classList.toggle('text-muted', remaining > 0);
+    }
+
     // ── Toggle action (Promote vs Graduate) ──────────────────────────────────
     function handleActionChange() {
         if (actionGraduate.checked) {
@@ -72,6 +96,7 @@ export function initPromotionIsland() {
             }
             updateTargetLabelsFromSelect();
         }
+        updateTargetCapacityHint();
         updateButtonState();
     }
 
@@ -83,6 +108,7 @@ export function initPromotionIsland() {
             if (actionPromote.checked) {
                 updateTargetLabelsFromSelect();
             }
+            updateTargetCapacityHint();
             updateButtonState();
         });
     }
