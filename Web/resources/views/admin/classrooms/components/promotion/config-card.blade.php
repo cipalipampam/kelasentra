@@ -23,6 +23,7 @@
                         <option value="{{ $classroom->id }}"
                             data-name="{{ $classroom->name }}"
                             data-level="{{ $classroom->level }}"
+                            data-major="{{ $classroom->major ?? '' }}"
                             data-year="{{ $classroom->academic_year }}"
                             {{ (old('source_classroom_id', request('source_classroom_id')) == $classroom->id) ? 'selected' : '' }}>
                             Tingkat {{ $classroom->level }} - {{ $classroom->name }} ({{ $classroom->academic_year }})
@@ -66,6 +67,7 @@
                         <option value="{{ $classroom->id }}"
                             data-name="{{ $classroom->name }}"
                             data-level="{{ $classroom->level }}"
+                            data-major="{{ $classroom->major ?? '' }}"
                             data-year="{{ $classroom->academic_year }}"
                             data-remaining="{{ max(0, $studentCapacity - $classroom->active_students_count) }}"
                             data-capacity="{{ $studentCapacity }}"
@@ -74,6 +76,7 @@
                         </option>
                     @endforeach
                 </select>
+                <div class="form-text small text-danger d-none" id="targetRuleHint"></div>
                 @error('target_classroom_id')
                     <div class="form-text small text-danger">{{ $message }}</div>
                 @else

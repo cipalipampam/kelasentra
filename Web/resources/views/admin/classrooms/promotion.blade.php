@@ -21,6 +21,9 @@
 
     </form>
 
+    {{-- ===== RIWAYAT EKSEKUSI & PEMBATALAN ===== --}}
+    @include('admin.classrooms.components.promotion.history')
+
 </div>
 @endsection
 
