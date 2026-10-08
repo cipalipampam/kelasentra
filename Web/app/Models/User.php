@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -89,5 +90,28 @@ class User extends Authenticatable
         return $this->belongsToMany(Subject::class, 'teacher_subjects')
             ->withPivot('is_primary')
             ->withTimestamps();
+    }
+
+    /**
+     * Guru yang masih aktif dan boleh ditunjuk menjadi wali kelas.
+     * Guru berstatus cuti, pensiun, atau resign dikecualikan. Pengguna
+     * tanpa data kepegawaian tetap dianggap aktif demi kompatibilitas.
+     */
+    public function scopeEligibleHomeroomTeacher(Builder $query): Builder
+    {
+        return $query->role('guru')->where(function (Builder $query) {
+            $query->whereDoesntHave('employee')
+                ->orWhereHas('employee', fn (Builder $employee) => $employee
+                    ->where('employment_status', Employee::STATUS_ACTIVE));
+        });
+    }
+
+    public function isEligibleHomeroomTeacher(): bool
+    {
+        if (! $this->hasRole('guru')) {
+            return false;
+        }
+
+        return $this->employee === null || $this->employee->isActive();
     }
 }
