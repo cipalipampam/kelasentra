@@ -3,7 +3,7 @@
  * Mengelola inisialisasi modul UI/UX pada halaman manajemen tahun ajaran.
  */
 import { initPeriodAssistantIsland } from './islands/period-assistant-island.js';
-import { initConfirmSubmitIsland } from './islands/confirm-submit-island.js';
+import { initConfirmSubmitIsland } from '../shared/islands/confirm-submit-island.js';
 
 function bootstrapAcademicYears() {
     initPeriodAssistantIsland();

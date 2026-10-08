@@ -1,8 +1,8 @@
 /**
- * Confirm Submit Island
+ * Confirm Submit Island (shared)
  * Meminta konfirmasi sebelum mengirim form yang ditandai `data-confirm-form`.
  * Dipasang di level document agar tetap bekerja setelah area hasil
- * live-filter diganti tanpa reload halaman.
+ * live-filter atau tabel AJAX diganti tanpa reload halaman.
  */
 export function initConfirmSubmitIsland() {
     if (document.documentElement.dataset.confirmSubmitBound === 'true') return;
