@@ -17,6 +17,8 @@ return new class extends Migration
             $table->string('nip')->unique()->nullable();
             $table->string('position')->nullable();
             $table->boolean('is_teacher')->default(true);
+            // Guru berstatus selain aktif tidak dapat ditunjuk sebagai wali kelas.
+            $table->enum('employment_status', ['active', 'leave', 'retired', 'resigned'])->default('active');
             $table->enum('gender', ['male', 'female'])->nullable();
             $table->string('place_of_birth')->nullable();
             $table->date('date_of_birth')->nullable();
