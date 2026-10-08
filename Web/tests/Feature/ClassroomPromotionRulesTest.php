@@ -362,6 +362,45 @@ class ClassroomPromotionRulesTest extends TestCase
 
     // ── Keutuhan daftar siswa ───────────────────────────────────────────────
 
+    public function test_revert_skips_students_when_the_source_classroom_was_deleted(): void
+    {
+        $admin = $this->createAdmin();
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year' => '2027/2028']);
+        $student = $this->createStudentIn($source, 1);
+
+        $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
+        $batch = PromotionBatch::firstOrFail();
+
+        // Rombel asal yang sudah kosong dihapus admin, sehingga posisi asal
+        // siswa tidak lagi bisa dipulihkan.
+        $source->delete();
+
+        $this->actingAs($admin)->post(route('admin.classrooms.promotion.revert', $batch->id));
+
+        $student->refresh();
+        $this->assertSame($target->id, $student->classroom_id);
+        $this->assertSame('active', $student->academic_status);
+    }
+
+    public function test_promotion_into_an_inactive_classroom_is_rejected(): void
+    {
+        $admin = $this->createAdmin();
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
+        $target = $this->createClassroom([
+            'name' => 'XI MIPA 1',
+            'level' => '11',
+            'academic_year' => '2027/2028',
+            'is_active' => false,
+        ]);
+        $student = $this->createStudentIn($source, 1);
+
+        $this->promote($admin, $source, $target, [$student->id])
+            ->assertSessionHasErrors('target_classroom_id');
+
+        $this->assertSame($source->id, $student->fresh()->classroom_id);
+    }
+
     public function test_students_must_still_be_active_in_the_source_classroom(): void
     {
         $admin = $this->createAdmin();
