@@ -10,7 +10,7 @@
                 Data Master Siswa
             </h1>
             <p class="text-muted small mb-0">
-                Kelola profil siswa, data akademik, NISN, kelas, dan akun akses sistem.
+                Kelola profil siswa, data akademik, NISN, rombel, dan akun akses sistem.
             </p>
         </div>
         <div class="col-md-6 text-md-end mt-3 mt-md-0">
@@ -33,14 +33,14 @@
                     </div>
                 </div>
                 <div class="col-lg-3 col-md-6">
-                    <label for="grade" class="form-label">Filter Kelas</label>
-                    <select name="grade" id="grade" class="form-select">
-                        <option value="">Semua Kelas</option>
-                        @if(isset($grades))
-                            @foreach($grades as $g)
-                                <option value="{{ $g }}" {{ request('grade') == $g ? 'selected' : '' }}>{{ $g }}</option>
-                            @endforeach
-                        @endif
+                    <label for="classroom_id" class="form-label">Filter Rombel</label>
+                    <select name="classroom_id" id="classroom_id" class="form-select">
+                        <option value="">Semua Rombel</option>
+                        @foreach($classrooms as $classroom)
+                            <option value="{{ $classroom->id }}" {{ (string) request('classroom_id') === (string) $classroom->id ? 'selected' : '' }}>
+                                {{ $classroom->name }}
+                            </option>
+                        @endforeach
                     </select>
                 </div>
                 <div class="col-lg-4 col-md-6">
@@ -80,9 +80,9 @@
                             </th>
                             <th>NISN</th>
                             <th class="sortable">
-                                <a href="{{ route('admin.students.index', array_merge(request()->query(), ['sort'=>'grade','direction'=>request('sort')=='grade'&&request('direction')=='asc'?'desc':'asc'])) }}"
-                                   class="{{ request('sort')=='grade' ? 'active-sort' : '' }}">
-                                    Kelas
+                                <a href="{{ route('admin.students.index', array_merge(request()->query(), ['sort'=>'classroom','direction'=>request('sort')=='classroom'&&request('direction')=='asc'?'desc':'asc'])) }}"
+                                   class="{{ request('sort')=='classroom' ? 'active-sort' : '' }}">
+                                    Rombel
                                     <i class="bi bi-arrow-down-up ms-1" style="font-size:0.7rem;"></i>
                                 </a>
                             </th>
@@ -117,10 +117,16 @@
                                     <div class="fw-medium text-dark">{{ $user->student->nisn ?? '-' }}</div>
                                 </td>
                                 <td>
-                                    @if($user->student->grade ?? false)
+                                    @if($user->student?->classroom)
                                         <span class="badge bg-light text-primary border px-2 py-1" style="font-size: 0.75rem;">
+                                            {{ $user->student->classroom->name }}
+                                        </span>
+                                        <div class="text-muted" style="font-size: 0.7rem;">{{ $user->student->classroom->academic_year }}</div>
+                                    @elseif($user->student->grade ?? false)
+                                        <span class="badge bg-light text-secondary border px-2 py-1" style="font-size: 0.75rem;">
                                             {{ $user->student->grade }}
                                         </span>
+                                        <div class="text-muted" style="font-size: 0.7rem;">Tanpa rombel (alumni)</div>
                                     @else
                                         <span class="text-muted small">-</span>
                                     @endif

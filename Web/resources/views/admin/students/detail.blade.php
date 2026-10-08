@@ -55,10 +55,22 @@
 
                     <div class="d-flex align-items-center justify-content-center gap-2 mt-2 flex-wrap">
                         <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1" style="font-size: 0.75rem;">
-                            <i class="bi bi-mortarboard me-1"></i>{{ $student->student->grade ?? 'Belum ada kelas' }}
+                            <i class="bi bi-mortarboard me-1"></i>{{ $student->student->grade ?? 'Belum ada rombel' }}
                         </span>
-                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1" style="font-size: 0.75rem;">
-                            <i class="bi bi-check-circle-fill me-1"></i>Siswa Aktif
+                        @if($student->student?->classroom)
+                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2.5 py-1" style="font-size: 0.75rem;">
+                                <i class="bi bi-calendar3 me-1"></i>TA {{ $student->student->classroom->academic_year }}
+                            </span>
+                        @endif
+                        @php($studentStatus = $student->student?->academic_status ?? 'active')
+                        @php($statusStyle = match ($studentStatus) {
+                            'active' => 'bg-success-subtle text-success border-success-subtle',
+                            'graduated' => 'bg-secondary-subtle text-secondary border-secondary-subtle',
+                            'transferred' => 'bg-warning-subtle text-warning border-warning-subtle',
+                            default => 'bg-danger-subtle text-danger border-danger-subtle',
+                        })
+                        <span class="badge {{ $statusStyle }} border px-2.5 py-1" style="font-size: 0.75rem;">
+                            <i class="bi bi-check-circle-fill me-1"></i>{{ $student->student?->academicStatusLabel() ?? 'Siswa Aktif' }}
                         </span>
                     </div>
 
