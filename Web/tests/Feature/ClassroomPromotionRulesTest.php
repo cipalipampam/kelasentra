@@ -60,6 +60,14 @@ class ClassroomPromotionRulesTest extends TestCase
         ]);
     }
 
+    private function createTeacher(string $name = 'Ibu Ratna Permata'): User
+    {
+        $teacher = User::factory()->create(['name' => $name]);
+        $teacher->assignRole('guru');
+
+        return $teacher;
+    }
+
     private function promote(User $admin, Classroom $source, ?Classroom $target, array $studentIds)
     {
         return $this->actingAs($admin)->post(route('admin.classrooms.promotion.process'), [
@@ -197,6 +205,159 @@ class ClassroomPromotionRulesTest extends TestCase
         $student->refresh();
         $this->assertNull($student->classroom_id);
         $this->assertSame('graduated', $student->academic_status);
+    }
+
+    // ── Rombel yang selesai melepas wali kelasnya ───────────────────────────
+
+    public function test_graduation_closes_the_classroom_and_releases_the_homeroom_teacher(): void
+    {
+        $admin = $this->createAdmin();
+        $teacher = $this->createTeacher();
+        $source = $this->createClassroom([
+            'name' => 'XII MIPA 1',
+            'level' => '12',
+            'homeroom_teacher_id' => $teacher->id,
+        ]);
+        $first = $this->createStudentIn($source, 1);
+        $second = $this->createStudentIn($source, 2);
+
+        $this->graduate($admin, $source, [$first->id, $second->id])->assertSessionHasNoErrors();
+
+        $source->refresh();
+        $this->assertFalse((bool) $source->is_active);
+        $this->assertNull($source->homeroom_teacher_id);
+
+        $batch = PromotionBatch::firstOrFail();
+        $this->assertTrue($batch->source_classroom_closed);
+        $this->assertSame($teacher->id, $batch->homeroom_teacher_id);
+        $this->assertSame($teacher->name, $batch->homeroom_teacher_name);
+    }
+
+    public function test_partial_graduation_keeps_the_classroom_open_with_its_homeroom_teacher(): void
+    {
+        $admin = $this->createAdmin();
+        $teacher = $this->createTeacher();
+        $source = $this->createClassroom([
+            'name' => 'XII MIPA 1',
+            'level' => '12',
+            'homeroom_teacher_id' => $teacher->id,
+        ]);
+        $leaving = $this->createStudentIn($source, 1);
+        $this->createStudentIn($source, 2);
+
+        $this->graduate($admin, $source, [$leaving->id])->assertSessionHasNoErrors();
+
+        $source->refresh();
+        $this->assertTrue((bool) $source->is_active);
+        $this->assertSame($teacher->id, $source->homeroom_teacher_id);
+        $this->assertFalse(PromotionBatch::firstOrFail()->source_classroom_closed);
+    }
+
+    public function test_promoting_every_student_also_closes_the_source_classroom(): void
+    {
+        $admin = $this->createAdmin();
+        $teacher = $this->createTeacher();
+        $source = $this->createClassroom([
+            'name' => 'X MIPA 1',
+            'level' => '10',
+            'academic_year' => '2026/2027',
+            'homeroom_teacher_id' => $teacher->id,
+        ]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year' => '2027/2028']);
+        $student = $this->createStudentIn($source, 1);
+
+        $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
+
+        $source->refresh();
+        $this->assertFalse((bool) $source->is_active);
+        $this->assertNull($source->homeroom_teacher_id);
+    }
+
+    public function test_released_homeroom_teacher_can_be_reassigned_in_the_same_academic_year(): void
+    {
+        $admin = $this->createAdmin();
+        $teacher = $this->createTeacher();
+        $source = $this->createClassroom([
+            'name' => 'XII MIPA 1',
+            'level' => '12',
+            'academic_year' => '2026/2027',
+            'homeroom_teacher_id' => $teacher->id,
+        ]);
+        $other = $this->createClassroom([
+            'name' => 'XI MIPA 2',
+            'level' => '11',
+            'section' => '2',
+            'academic_year' => '2026/2027',
+        ]);
+        $student = $this->createStudentIn($source, 1);
+
+        $this->graduate($admin, $source, [$student->id])->assertSessionHasNoErrors();
+
+        // Sebelum perbaikan, rombel yang sudah lulus masih memegang gurunya
+        // sehingga penugasan ini ditolak aturan sekaligus unique index tabel.
+        $this->actingAs($admin)
+            ->put(route('admin.classrooms.update', $other->id), [
+                'name' => $other->name,
+                'level' => '11',
+                'major' => 'MIPA',
+                'section' => '2',
+                'academic_year' => '2026/2027',
+                'homeroom_teacher_id' => $teacher->id,
+                'is_active' => '1',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($teacher->id, $other->fresh()->homeroom_teacher_id);
+    }
+
+    public function test_reverting_a_graduation_reopens_the_classroom_and_restores_the_homeroom_teacher(): void
+    {
+        $admin = $this->createAdmin();
+        $teacher = $this->createTeacher();
+        $source = $this->createClassroom([
+            'name' => 'XII MIPA 1',
+            'level' => '12',
+            'homeroom_teacher_id' => $teacher->id,
+        ]);
+        $student = $this->createStudentIn($source, 1);
+
+        $this->graduate($admin, $source, [$student->id])->assertSessionHasNoErrors();
+        $batch = PromotionBatch::firstOrFail();
+
+        $this->actingAs($admin)
+            ->post(route('admin.classrooms.promotion.revert', $batch->id))
+            ->assertSessionHasNoErrors();
+
+        $source->refresh();
+        $this->assertTrue((bool) $source->is_active);
+        $this->assertSame($teacher->id, $source->homeroom_teacher_id);
+        $this->assertSame($source->id, $student->fresh()->classroom_id);
+    }
+
+    public function test_homeroom_teacher_is_left_empty_when_taken_elsewhere_before_revert(): void
+    {
+        $admin = $this->createAdmin();
+        $teacher = $this->createTeacher();
+        $source = $this->createClassroom([
+            'name' => 'XII MIPA 1',
+            'level' => '12',
+            'homeroom_teacher_id' => $teacher->id,
+        ]);
+        $other = $this->createClassroom(['name' => 'XI MIPA 2', 'level' => '11', 'section' => '2']);
+        $student = $this->createStudentIn($source, 1);
+
+        $this->graduate($admin, $source, [$student->id])->assertSessionHasNoErrors();
+
+        // Guru sudah dipakai rombel lain di tahun ajaran yang sama.
+        $other->update(['homeroom_teacher_id' => $teacher->id]);
+
+        $batch = PromotionBatch::firstOrFail();
+        $this->actingAs($admin)->post(route('admin.classrooms.promotion.revert', $batch->id));
+
+        $source->refresh();
+        $this->assertTrue((bool) $source->is_active);
+        $this->assertNull($source->homeroom_teacher_id);
+        $this->assertSame($teacher->id, $other->fresh()->homeroom_teacher_id);
     }
 
     // ── Keutuhan daftar siswa ───────────────────────────────────────────────
