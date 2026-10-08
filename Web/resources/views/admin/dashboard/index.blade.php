@@ -24,10 +24,13 @@
         </div>
     @endif
 
-    {{-- ===== ISLAND COMPONENTS ===== --}}
+    {{-- ===== HEADER STATUS BAR ===== --}}
     @include('admin.dashboard.components.header')
+
+    {{-- ===== 4 KPI METRIC CARDS ===== --}}
     @include('admin.dashboard.components.kpi-cards')
 
+    {{-- ===== AREA TREN MINGGUAN & INBOX TINDAKAN ===== --}}
     <div class="row g-4 mb-4">
         <div class="col-xl-7">
             @include('admin.dashboard.components.weekly-chart')
@@ -37,16 +40,8 @@
         </div>
     </div>
 
+    {{-- ===== LOG PRESENSI REAL-TIME HARI INI ===== --}}
     @include('admin.dashboard.components.live-attendance')
-
-    <div class="row g-4">
-        <div class="col-lg-6">
-            @include('admin.dashboard.components.geofence-summary')
-        </div>
-        <div class="col-lg-6">
-            @include('admin.dashboard.components.recent-announcements')
-        </div>
-    </div>
 
 </div>
 
