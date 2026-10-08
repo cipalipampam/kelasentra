@@ -34,7 +34,17 @@ class StoreClassroomRequest extends FormRequest
                 'string',
                 Rule::in(config('classroom.majors')),
             ],
-            'section' => ['required', 'string', 'max:10'],
+            'section' => [
+                'required',
+                'string',
+                'max:10',
+                // Satu nomor sesi hanya boleh dipakai sekali per tingkat + jurusan + tahun ajaran.
+                Rule::unique('classrooms', 'section')
+                    ->where(fn ($query) => $query
+                        ->where('level', $this->input('level'))
+                        ->where('major', $this->input('major'))
+                        ->where('academic_year', $this->input('academic_year'))),
+            ],
             'academic_year' => [
                 'required',
                 'string',
@@ -63,6 +73,7 @@ class StoreClassroomRequest extends FormRequest
             'major.required' => 'Jurusan wajib dipilih untuk tingkat XI dan XII.',
             'major.in' => 'Jurusan yang dipilih tidak valid.',
             'section.required' => 'Nomor rombel wajib diisi.',
+            'section.unique' => 'Nomor sesi ini sudah dipakai pada tingkat, jurusan, dan tahun ajaran yang sama.',
             'academic_year.required' => 'Tahun ajaran wajib diisi.',
             'academic_year.exists' => 'Tahun ajaran tidak valid. Hanya tahun ajaran aktif atau yang akan datang yang dapat dipilih.',
             'homeroom_teacher_id.exists' => 'Wali kelas yang dipilih tidak valid.',
