@@ -171,6 +171,73 @@ class ClassroomRulesTest extends TestCase
         $this->assertSame('1', $classroom->fresh()->section);
     }
 
+    // ── Rombel nonaktif tidak menyimpan wali kelas ──────────────────────────
+
+    public function test_deactivating_a_classroom_releases_its_homeroom_teacher(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027');
+        $teacher = $this->createTeacher();
+        $classroom = $this->createClassroom(['name' => 'X MIPA 1', 'homeroom_teacher_id' => $teacher->id]);
+
+        $response = $this->actingAs($admin)
+            ->put(route('admin.classrooms.update', $classroom->id), $this->validPayload([
+                'name' => 'X MIPA 1',
+                'homeroom_teacher_id' => $teacher->id,
+                'is_active' => '0',
+            ]));
+
+        $response->assertSessionHasNoErrors();
+
+        $classroom->refresh();
+        $this->assertFalse((bool) $classroom->is_active);
+        $this->assertNull($classroom->homeroom_teacher_id);
+    }
+
+    public function test_teacher_released_by_deactivation_can_take_another_classroom(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027');
+        $teacher = $this->createTeacher();
+        $deactivated = $this->createClassroom(['name' => 'X MIPA 1', 'homeroom_teacher_id' => $teacher->id]);
+        $other = $this->createClassroom(['name' => 'X MIPA 2', 'section' => '2']);
+
+        $this->actingAs($admin)->put(route('admin.classrooms.update', $deactivated->id), $this->validPayload([
+            'name' => 'X MIPA 1',
+            'is_active' => '0',
+        ]))->assertSessionHasNoErrors();
+
+        $this->actingAs($admin)
+            ->put(route('admin.classrooms.update', $other->id), $this->validPayload([
+                'name' => 'X MIPA 2',
+                'section' => '2',
+                'homeroom_teacher_id' => $teacher->id,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($teacher->id, $other->fresh()->homeroom_teacher_id);
+    }
+
+    public function test_inactive_classroom_does_not_keep_a_homeroom_teacher(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027');
+        $teacher = $this->createTeacher();
+
+        $this->actingAs($admin)
+            ->post(route('admin.classrooms.store'), $this->validPayload([
+                'name' => 'X MIPA 2',
+                'section' => '2',
+                'homeroom_teacher_id' => $teacher->id,
+                'is_active' => '0',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $classroom = Classroom::query()->where('name', 'X MIPA 2')->firstOrFail();
+        $this->assertFalse((bool) $classroom->is_active);
+        $this->assertNull($classroom->homeroom_teacher_id);
+    }
+
     // ── Rule 2: jurusan enum, wajib untuk XI/XII ─────────────────────────────
 
     public function test_major_is_required_for_level_11_and_12(): void

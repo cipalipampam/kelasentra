@@ -193,12 +193,24 @@ class ClassroomService
     {
         $data['is_active'] = (bool) ($data['is_active'] ?? true);
 
+        // Rombel yang tidak berjalan tidak menyimpan wali kelas.
+        if (! $data['is_active']) {
+            $data['homeroom_teacher_id'] = null;
+        }
+
         return Classroom::create($data);
     }
 
     public function updateClassroom(Classroom $classroom, array $data): bool
     {
         $data['is_active'] = (bool) ($data['is_active'] ?? false);
+
+        // Menonaktifkan rombel berarti rombel itu berhenti berjalan, jadi wali
+        // kelasnya dilepas agar gurunya bisa dirotasi ke rombel lain, termasuk
+        // pada tahun ajaran yang sama.
+        if (! $data['is_active']) {
+            $data['homeroom_teacher_id'] = null;
+        }
 
         return $classroom->update($data);
     }

@@ -121,6 +121,9 @@
                                     Rombel Aktif (tampil dan bisa digunakan untuk pencatatan presensi siswa)
                                 </label>
                             </div>
+                            <div class="form-text small text-muted">
+                                Rombel nonaktif tidak menyimpan wali kelas dan tidak dapat menerima siswa baru.
+                            </div>
                         </div>
                     </div>
                 </div>
