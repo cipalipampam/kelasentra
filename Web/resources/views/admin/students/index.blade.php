@@ -38,7 +38,7 @@
                         <option value="">Semua Rombel</option>
                         @foreach($classrooms as $classroom)
                             <option value="{{ $classroom->id }}" {{ (string) request('classroom_id') === (string) $classroom->id ? 'selected' : '' }}>
-                                {{ $classroom->name }}
+                                {{ $classroom->name }} ({{ $classroom->academic_year }})
                             </option>
                         @endforeach
                     </select>

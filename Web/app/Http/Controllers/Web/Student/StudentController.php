@@ -63,7 +63,7 @@ class StudentController extends Controller
 
         $students = $query->paginate($request->input('per_page', 10));
 
-        $classrooms = $this->classroomService->getActiveYearClassrooms();
+        $classrooms = $this->classroomService->getRunningClassrooms();
 
         return view('admin.students.index', compact('students', 'classrooms'));
     }

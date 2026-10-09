@@ -120,7 +120,7 @@
                                     <option value="">-- Pilih Rombel --</option>
                                     @foreach($classrooms as $classroom)
                                         <option value="{{ $classroom->id }}" @selected((string) old('classroom_id', $studentRecord->classroom_id ?? '') === (string) $classroom->id)>
-                                            {{ $classroom->name }} (sisa {{ $classroom->maxStudents() - $classroom->active_students_count }} kursi)
+                                            {{ $classroom->name }} — TA {{ $classroom->academic_year }} (sisa {{ $classroom->maxStudents() - $classroom->active_students_count }} kursi)
                                         </option>
                                     @endforeach
                                 </select>
