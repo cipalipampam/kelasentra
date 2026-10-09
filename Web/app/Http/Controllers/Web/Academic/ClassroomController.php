@@ -70,10 +70,19 @@ class ClassroomController extends Controller
     {
         $data = $request->validated();
         $data['is_active'] = $request->boolean('is_active');
+
+        $releasedTeacher = $data['is_active'] ? null : $classroom->homeroomTeacher?->name;
+
         $this->classroomService->updateClassroom($classroom, $data);
 
+        $message = 'Data rombel kelas berhasil diperbarui.';
+
+        if ($releasedTeacher !== null) {
+            $message .= " Rombel {$classroom->name} dinonaktifkan sehingga wali kelas {$releasedTeacher} dilepas dan bisa dirotasi ke rombel lain.";
+        }
+
         return redirect()->route('admin.classrooms.index')
-            ->with('success', 'Data rombel kelas berhasil diperbarui.');
+            ->with('success', $message);
     }
 
     public function destroy(Classroom $classroom): RedirectResponse

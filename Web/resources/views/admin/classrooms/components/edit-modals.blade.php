@@ -122,6 +122,9 @@
                                         Rombel Aktif (tampil dan bisa digunakan di sistem)
                                     </label>
                                 </div>
+                                <div class="form-text small text-muted">
+                                    Menonaktifkan rombel akan melepas wali kelasnya agar bisa dirotasi ke rombel lain.
+                                </div>
                             </div>
                         </div>
                     </div>

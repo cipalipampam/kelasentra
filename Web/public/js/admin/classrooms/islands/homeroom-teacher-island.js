@@ -1,8 +1,9 @@
 /**
  * Homeroom Teacher Island
  * Mencegah satu guru dipilih sebagai wali kelas pada dua rombel
- * di tahun ajaran yang sama, dan menyembunyikan guru yang tidak aktif
- * (guru nonaktif sudah difilter di sisi server).
+ * di tahun ajaran yang sama, menyembunyikan guru yang tidak aktif
+ * (guru nonaktif sudah difilter di sisi server), dan mengunci pilihan wali
+ * kelas ketika rombel dinonaktifkan karena rombel nonaktif tidak berjalan.
  */
 export function initHomeroomTeacherIsland() {
     document.querySelectorAll('select[data-homeroom-teacher-select]').forEach((teacherSelect) => {
@@ -10,7 +11,17 @@ export function initHomeroomTeacherIsland() {
         const yearSelect = form?.querySelector('select[data-academic-year-select]');
         if (!yearSelect) return;
 
+        const activeToggle = form.querySelector('input[name="is_active"][type="checkbox"]');
+
         function sync() {
+            if (activeToggle && !activeToggle.checked) {
+                teacherSelect.value = '';
+                teacherSelect.disabled = true;
+
+                return;
+            }
+
+            teacherSelect.disabled = false;
             const year = yearSelect.value;
 
             Array.from(teacherSelect.options).forEach((option) => {
@@ -34,6 +45,7 @@ export function initHomeroomTeacherIsland() {
         }
 
         yearSelect.addEventListener('change', sync);
+        activeToggle?.addEventListener('change', sync);
         sync();
     });
 }
