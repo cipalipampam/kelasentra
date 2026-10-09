@@ -9,8 +9,8 @@ use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 
 /**
- * Memastikan rombel yang dipilih untuk seorang siswa adalah rombel tahun
- * ajaran aktif dan masih punya kursi.
+ * Memastikan rombel yang dipilih untuk seorang siswa berada pada tahun ajaran
+ * yang masih berjalan (aktif atau akan datang) dan masih punya kursi.
  *
  * Saat mengedit, hitungan kursi mengecualikan siswa itu sendiri agar rombel
  * yang sudah tepat penuh tidak menolak penyimpanan perubahan data lain.
@@ -45,8 +45,11 @@ class EnrollableClassroom implements ValidationRule
             return;
         }
 
-        if (! $classroom->is_active || $classroom->academic_year !== AcademicYear::activeName()) {
-            $fail("Rombel {$classroom->name} bukan rombel tahun ajaran aktif, sehingga belum dapat menerima siswa baru.");
+        // Rombel tahun ajaran aktif maupun yang akan datang boleh menerima
+        // siswa, karena rombel tahun ajaran berikutnya memang disiapkan lebih
+        // dulu sebelum tahun ajarannya berganti.
+        if (! $classroom->is_active || ! in_array($classroom->academic_year, AcademicYear::selectableNames(), true)) {
+            $fail("Rombel {$classroom->name} bukan rombel tahun ajaran aktif atau yang akan datang, sehingga belum dapat menerima siswa.");
 
             return;
         }

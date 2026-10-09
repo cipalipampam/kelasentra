@@ -223,10 +223,13 @@ class StudentRombelIntegrationTest extends TestCase
             ->assertSee('name="classroom_id"', false);
     }
 
-    public function test_index_lists_only_the_active_years_rombels_in_the_filter(): void
+    public function test_index_filter_lists_running_classrooms_only(): void
     {
         $admin = $this->createAdmin();
         $this->createClassroom(['name' => 'XI MIPA 1', 'section' => '1']);
+
+        AcademicYear::create(['name' => '2027/2028', 'status' => AcademicYear::STATUS_UPCOMING]);
+        $upcoming = $this->createClassroom(['name' => 'XI MIPA 2', 'section' => '2', 'academic_year' => '2027/2028']);
 
         AcademicYear::create(['name' => '2025/2026', 'status' => AcademicYear::STATUS_ARCHIVED]);
         $past = $this->createClassroom(['name' => 'XI MIPA 9', 'section' => '9', 'academic_year' => '2025/2026']);
@@ -235,7 +238,27 @@ class StudentRombelIntegrationTest extends TestCase
 
         $response->assertOk()
             ->assertSee('XI MIPA 1')
+            ->assertSee($upcoming->name)
             ->assertDontSee($past->name);
+    }
+
+    public function test_upcoming_year_classroom_can_receive_new_students(): void
+    {
+        $admin = $this->createAdmin();
+        AcademicYear::create(['name' => '2027/2028', 'status' => AcademicYear::STATUS_UPCOMING]);
+
+        $upcoming = $this->createClassroom([
+            'name' => 'X MIPA 1',
+            'level' => '10',
+            'academic_year' => '2027/2028',
+        ]);
+
+        $response = $this->actingAs($admin)->post(route('admin.students.store'), $this->payload([
+            'classroom_id' => $upcoming->id,
+        ]));
+
+        $response->assertSessionHasNoErrors();
+        $this->assertSame($upcoming->id, Student::firstOrFail()->classroom_id);
     }
 
     public function test_attendance_page_filters_records_by_rombel(): void

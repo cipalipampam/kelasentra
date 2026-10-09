@@ -149,7 +149,7 @@ class AdminAttendanceController extends Controller
         $perPage = min(max((int) $request->input('per_page', 10), 10), 100);
         $attendances = $query->orderByDesc('recorded_at')->paginate($perPage);
         $attendances->appends($filters + ['per_page' => $perPage]);
-        $classrooms = $this->classroomService->getActiveYearClassrooms();
+        $classrooms = $this->classroomService->getRunningClassrooms();
 
         return view('admin.attendances.index', array_merge(compact('attendances', 'classrooms'), $filters, [
             'attendanceType' => $attendanceType,

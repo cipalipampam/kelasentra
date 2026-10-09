@@ -54,20 +54,23 @@ class ClassroomService
     }
 
     /**
-     * Daftar rombel tahun ajaran aktif, terurut tingkat → jurusan → sesi.
-     * Dipakai untuk filter dan tampilan, termasuk rombel yang sudah penuh.
+     * Daftar rombel yang masih berjalan, yaitu rombel aktif pada tahun ajaran
+     * aktif atau yang akan datang, terurut tingkat → jurusan → sesi → tahun.
+     *
+     * Tahun ajaran yang akan datang ikut disertakan karena rombelnya memang
+     * sudah disiapkan sebelum tahun ajaran berganti.
      */
-    public function getActiveYearClassrooms(): Collection
+    public function getRunningClassrooms(): Collection
     {
-        $academicYear = AcademicYear::activeName();
+        $academicYears = AcademicYear::selectableNames();
 
-        if (! $academicYear) {
+        if ($academicYears === []) {
             return new Collection;
         }
 
         return $this->sortByLevelMajorSection(
             Classroom::query()
-                ->where('academic_year', $academicYear)
+                ->whereIn('academic_year', $academicYears)
                 ->where('is_active', true)
                 ->with(['homeroomTeacher:id,name'])
                 ->withCount([
@@ -86,7 +89,7 @@ class ClassroomService
      */
     public function getEnrollableClassrooms(?int $includeClassroomId = null): Collection
     {
-        $classrooms = $this->getActiveYearClassrooms()
+        $classrooms = $this->getRunningClassrooms()
             ->filter(fn (Classroom $classroom) => $classroom->active_students_count < $classroom->maxStudents());
 
         if ($includeClassroomId && ! $classrooms->contains('id', $includeClassroomId)) {
@@ -114,6 +117,7 @@ class ClassroomService
                 (string) $classroom->level,
                 $majorRank[$classroom->major] ?? PHP_INT_MAX,
                 (string) $classroom->section,
+                (string) $classroom->academic_year,
             ])
             ->values();
     }
