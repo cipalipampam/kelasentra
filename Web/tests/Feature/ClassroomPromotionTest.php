@@ -35,24 +35,14 @@ class ClassroomPromotionTest extends TestCase
             'level' => $level,
             'major' => 'MIPA',
             'section' => '1',
-            'academic_year' => $year,
+            'academic_year_id' => $this->yearId($year),
             'is_active' => true,
         ]);
     }
 
     private function createStudentInClassroom(Classroom $classroom, string $nis = '1001'): Student
     {
-        $user = User::factory()->create();
-        $user->assignRole('siswa');
-
-        return Student::create([
-            'user_id' => $user->id,
-            'classroom_id' => $classroom->id,
-            'nis' => $nis,
-            'nisn' => '00'.$nis,
-            'grade' => $classroom->name,
-            'academic_status' => 'active',
-        ]);
+        return $this->enrollStudent($classroom, $nis);
     }
 
     public function test_admin_can_access_promotion_page(): void
@@ -118,27 +108,13 @@ class ClassroomPromotionTest extends TestCase
         $response->assertRedirect(route('admin.classrooms.promotion'))
             ->assertSessionHas('success');
 
-        // Verifikasi studentA dan studentB telah pindah
-        $this->assertDatabaseHas('students', [
-            'id' => $studentA->id,
-            'classroom_id' => $targetClass->id,
-            'grade' => $targetClass->name,
-            'academic_status' => 'active',
-        ]);
-
-        $this->assertDatabaseHas('students', [
-            'id' => $studentB->id,
-            'classroom_id' => $targetClass->id,
-            'grade' => $targetClass->name,
-            'academic_status' => 'active',
-        ]);
+        // Verifikasi studentA dan studentB telah pindah lewat enrollment baru
+        $this->assertSame($targetClass->id, $studentA->fresh()->currentEnrollment->classroom_id);
+        $this->assertSame($targetClass->id, $studentB->fresh()->currentEnrollment->classroom_id);
+        $this->assertSame('active', $studentA->fresh()->academic_status);
 
         // Verifikasi studentC tetap di kelas asal
-        $this->assertDatabaseHas('students', [
-            'id' => $studentC->id,
-            'classroom_id' => $sourceClass->id,
-            'academic_status' => 'active',
-        ]);
+        $this->assertSame($sourceClass->id, $studentC->fresh()->currentEnrollment->classroom_id);
 
         // Verifikasi notifikasi dibuat untuk siswa yang dipromosikan
         $this->assertDatabaseHas('app_notifications', [
@@ -175,18 +151,14 @@ class ClassroomPromotionTest extends TestCase
         $response->assertRedirect(route('admin.classrooms.promotion'))
             ->assertSessionHas('success');
 
-        // Verifikasi kedua siswa menjadi graduated dan classroom_id null
-        $this->assertDatabaseHas('students', [
-            'id' => $student1->id,
-            'classroom_id' => null,
-            'academic_status' => 'graduated',
-        ]);
-
-        $this->assertDatabaseHas('students', [
-            'id' => $student2->id,
-            'classroom_id' => null,
-            'academic_status' => 'graduated',
-        ]);
+        // Verifikasi kedua siswa lulus: enrollment terakhir ditutup
+        foreach ([$student1, $student2] as $student) {
+            $fresh = $student->fresh();
+            $this->assertSame('graduated', $fresh->academic_status);
+            $this->assertNull($fresh->currentEnrollment);
+            $this->assertNotNull($fresh->graduated_at);
+            $this->assertNotNull($fresh->enrollments()->first()->ended_at);
+        }
 
         // Verifikasi notifikasi kelulusan
         $this->assertDatabaseHas('app_notifications', [

@@ -26,9 +26,6 @@ class PromotionBatch extends Model
         'target_classroom_id',
         'target_classroom_name',
         'target_academic_year',
-        'source_classroom_closed',
-        'homeroom_teacher_id',
-        'homeroom_teacher_name',
         'performed_by',
         'performed_by_name',
         'student_count',
@@ -39,7 +36,6 @@ class PromotionBatch extends Model
 
     protected $casts = [
         'reverted_at' => 'datetime',
-        'source_classroom_closed' => 'boolean',
     ];
 
     public function items(): HasMany
@@ -77,17 +73,4 @@ class PromotionBatch extends Model
         return $this->target_classroom_name ?? 'Alumni / Lulus';
     }
 
-    /**
-     * Keterangan wali kelas yang dilepas karena rombel asal ditutup.
-     */
-    public function releasedHomeroomTeacherLabel(): ?string
-    {
-        if (! $this->source_classroom_closed) {
-            return null;
-        }
-
-        return $this->homeroom_teacher_name !== null
-            ? "Wali kelas {$this->homeroom_teacher_name} dilepas"
-            : 'Rombel asal ditutup';
-    }
 }

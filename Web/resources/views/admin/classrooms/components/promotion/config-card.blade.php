@@ -24,12 +24,14 @@
                             data-name="{{ $classroom->name }}"
                             data-level="{{ $classroom->level }}"
                             data-major="{{ $classroom->major ?? '' }}"
-                            data-year="{{ $classroom->academic_year }}"
+                            data-year="{{ $classroom->academicYear?->name }}"
+                            data-year-start="{{ $classroom->academicYear?->start_year }}"
                             {{ (old('source_classroom_id', request('source_classroom_id')) == $classroom->id) ? 'selected' : '' }}>
-                            Tingkat {{ $classroom->level }} - {{ $classroom->name }} ({{ $classroom->academic_year }})
+                            Tingkat {{ $classroom->level }} - {{ $classroom->name }} ({{ $classroom->academicYear?->name }})
                         </option>
                     @endforeach
                 </select>
+                <div class="form-text small text-muted" id="sourceClassHelpText">Menampilkan rombel tingkat X dan XI yang memenuhi syarat kenaikan.</div>
             </div>
 
             {{-- JENIS AKSI (SEPARATE TOGGLE CARDS DENGAN GAP) --}}
@@ -68,11 +70,12 @@
                             data-name="{{ $classroom->name }}"
                             data-level="{{ $classroom->level }}"
                             data-major="{{ $classroom->major ?? '' }}"
-                            data-year="{{ $classroom->academic_year }}"
+                            data-year="{{ $classroom->academicYear?->name }}"
+                            data-year-start="{{ $classroom->academicYear?->start_year }}"
                             data-remaining="{{ max(0, $studentCapacity - $classroom->active_students_count) }}"
                             data-capacity="{{ $studentCapacity }}"
                             {{ old('target_classroom_id') == $classroom->id ? 'selected' : '' }}>
-                            Tingkat {{ $classroom->level }} - {{ $classroom->name }} ({{ $classroom->academic_year }})
+                            Tingkat {{ $classroom->level }} - {{ $classroom->name }} ({{ $classroom->academicYear?->name }})
                         </option>
                     @endforeach
                 </select>

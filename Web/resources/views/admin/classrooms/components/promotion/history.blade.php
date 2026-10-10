@@ -46,11 +46,6 @@
                                 <td class="small text-dark">
                                     {{ $batch->source_classroom_name }}
                                     <span class="text-muted d-block" style="font-size: 0.72rem;">{{ $batch->source_academic_year }}</span>
-                                    @if($batch->releasedHomeroomTeacherLabel())
-                                        <span class="text-warning-emphasis d-block" style="font-size: 0.72rem;">
-                                            <i class="bi bi-person-dash me-1"></i>{{ $batch->releasedHomeroomTeacherLabel() }}
-                                        </span>
-                                    @endif
                                 </td>
                                 <td class="small text-dark">
                                     {{ $batch->targetLabel() }}

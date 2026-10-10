@@ -6,6 +6,7 @@ use App\Models\Classroom;
 use App\Models\PromotionBatch;
 use App\Models\PromotionBatchItem;
 use App\Models\Student;
+use App\Models\StudentEnrollment;
 use App\Models\User;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -40,24 +41,14 @@ class ClassroomPromotionRulesTest extends TestCase
             'level' => '10',
             'major' => 'MIPA',
             'section' => '1',
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
             'is_active' => true,
         ], $attributes));
     }
 
     private function createStudentIn(Classroom $classroom, int $index, string $status = 'active'): Student
     {
-        $user = User::factory()->create();
-        $user->assignRole('siswa');
-
-        return Student::create([
-            'user_id' => $user->id,
-            'classroom_id' => $classroom->id,
-            'nis' => 'S'.$classroom->id.'-'.$index,
-            'grade' => $classroom->name,
-            'gender' => $index % 2 === 0 ? 'male' : 'female',
-            'academic_status' => $status,
-        ]);
+        return $this->enrollStudent($classroom, 'S'.$classroom->id.'-'.$index, $status);
     }
 
     private function createTeacher(string $name = 'Ibu Ratna Permata'): User
@@ -92,8 +83,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_promotion_cannot_skip_a_level(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])
@@ -105,8 +96,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_promotion_cannot_move_backwards(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])
@@ -116,8 +107,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_level_xii_classroom_cannot_be_promoted(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])
@@ -127,8 +118,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_staged_promotion_is_accepted(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
@@ -143,8 +134,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_major_cannot_change_during_promotion(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'major' => 'MIPA', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI IPS 1', 'level' => '11', 'major' => 'IPS', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI IPS 1', 'level' => '11', 'major' => 'IPS', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])
@@ -154,8 +145,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_class_x_without_major_may_choose_any_major(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X BAHASA 1', 'level' => '10', 'major' => null, 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI IPS 1', 'level' => '11', 'major' => 'IPS', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X BAHASA 1', 'level' => '10', 'major' => null, 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI IPS 1', 'level' => '11', 'major' => 'IPS', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
@@ -168,14 +159,14 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_target_academic_year_must_be_newer(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
         $student = $this->createStudentIn($source, 1);
 
-        $sameYear = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2026/2027']);
+        $sameYear = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2026/2027')]);
         $this->promote($admin, $source, $sameYear, [$student->id])
             ->assertSessionHasErrors('target_classroom_id');
 
-        $olderYear = $this->createClassroom(['name' => 'XI MIPA 2', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2025/2026']);
+        $olderYear = $this->createClassroom(['name' => 'XI MIPA 2', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2025/2026')]);
         $this->promote($admin, $source, $olderYear, [$student->id])
             ->assertSessionHasErrors('target_classroom_id');
     }
@@ -185,7 +176,7 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_graduation_is_rejected_for_non_final_level(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->graduate($admin, $source, [$student->id])
@@ -197,7 +188,7 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_graduation_is_accepted_for_level_xii(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'academic_year' => '2026/2027']);
+        $source = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'academic_year_id' => $this->yearId('2026/2027')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->graduate($admin, $source, [$student->id])->assertSessionHasNoErrors();
@@ -207,9 +198,10 @@ class ClassroomPromotionRulesTest extends TestCase
         $this->assertSame('graduated', $student->academic_status);
     }
 
-    // ── Rombel yang selesai melepas wali kelasnya ───────────────────────────
+    // ── Rombel tidak ditutup otomatis saat siswanya habis ───────────────────
+    // "Selesai" ditentukan oleh status tahun ajaran, bukan jumlah siswa.
 
-    public function test_graduation_closes_the_classroom_and_releases_the_homeroom_teacher(): void
+    public function test_graduating_every_student_keeps_the_source_classroom_active(): void
     {
         $admin = $this->createAdmin();
         $teacher = $this->createTeacher();
@@ -224,93 +216,32 @@ class ClassroomPromotionRulesTest extends TestCase
         $this->graduate($admin, $source, [$first->id, $second->id])->assertSessionHasNoErrors();
 
         $source->refresh();
-        $this->assertFalse((bool) $source->is_active);
-        $this->assertNull($source->homeroom_teacher_id);
-
-        $batch = PromotionBatch::firstOrFail();
-        $this->assertTrue($batch->source_classroom_closed);
-        $this->assertSame($teacher->id, $batch->homeroom_teacher_id);
-        $this->assertSame($teacher->name, $batch->homeroom_teacher_name);
-    }
-
-    public function test_partial_graduation_keeps_the_classroom_open_with_its_homeroom_teacher(): void
-    {
-        $admin = $this->createAdmin();
-        $teacher = $this->createTeacher();
-        $source = $this->createClassroom([
-            'name' => 'XII MIPA 1',
-            'level' => '12',
-            'homeroom_teacher_id' => $teacher->id,
-        ]);
-        $leaving = $this->createStudentIn($source, 1);
-        $this->createStudentIn($source, 2);
-
-        $this->graduate($admin, $source, [$leaving->id])->assertSessionHasNoErrors();
-
-        $source->refresh();
         $this->assertTrue((bool) $source->is_active);
         $this->assertSame($teacher->id, $source->homeroom_teacher_id);
-        $this->assertFalse(PromotionBatch::firstOrFail()->source_classroom_closed);
+        $this->assertSame(0, $source->activeStudentCount());
     }
 
-    public function test_promoting_every_student_also_closes_the_source_classroom(): void
+    public function test_promoting_every_student_keeps_the_source_classroom_active(): void
     {
         $admin = $this->createAdmin();
         $teacher = $this->createTeacher();
         $source = $this->createClassroom([
             'name' => 'X MIPA 1',
             'level' => '10',
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
             'homeroom_teacher_id' => $teacher->id,
         ]);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year' => '2027/2028']);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
 
         $source->refresh();
-        $this->assertFalse((bool) $source->is_active);
-        $this->assertNull($source->homeroom_teacher_id);
+        $this->assertTrue((bool) $source->is_active);
+        $this->assertSame($teacher->id, $source->homeroom_teacher_id);
     }
 
-    public function test_released_homeroom_teacher_can_be_reassigned_in_the_same_academic_year(): void
-    {
-        $admin = $this->createAdmin();
-        $teacher = $this->createTeacher();
-        $source = $this->createClassroom([
-            'name' => 'XII MIPA 1',
-            'level' => '12',
-            'academic_year' => '2026/2027',
-            'homeroom_teacher_id' => $teacher->id,
-        ]);
-        $other = $this->createClassroom([
-            'name' => 'XI MIPA 2',
-            'level' => '11',
-            'section' => '2',
-            'academic_year' => '2026/2027',
-        ]);
-        $student = $this->createStudentIn($source, 1);
-
-        $this->graduate($admin, $source, [$student->id])->assertSessionHasNoErrors();
-
-        // Sebelum perbaikan, rombel yang sudah lulus masih memegang gurunya
-        // sehingga penugasan ini ditolak aturan sekaligus unique index tabel.
-        $this->actingAs($admin)
-            ->put(route('admin.classrooms.update', $other->id), [
-                'name' => $other->name,
-                'level' => '11',
-                'major' => 'MIPA',
-                'section' => '2',
-                'academic_year' => '2026/2027',
-                'homeroom_teacher_id' => $teacher->id,
-                'is_active' => '1',
-            ])
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame($teacher->id, $other->fresh()->homeroom_teacher_id);
-    }
-
-    public function test_reverting_a_graduation_reopens_the_classroom_and_restores_the_homeroom_teacher(): void
+    public function test_reverting_a_graduation_restores_the_enrollment(): void
     {
         $admin = $this->createAdmin();
         $teacher = $this->createTeacher();
@@ -328,53 +259,59 @@ class ClassroomPromotionRulesTest extends TestCase
             ->post(route('admin.classrooms.promotion.revert', $batch->id))
             ->assertSessionHasNoErrors();
 
-        $source->refresh();
-        $this->assertTrue((bool) $source->is_active);
-        $this->assertSame($teacher->id, $source->homeroom_teacher_id);
         $this->assertSame($source->id, $student->fresh()->classroom_id);
+        $this->assertSame('active', $student->fresh()->academic_status);
     }
 
-    public function test_homeroom_teacher_is_left_empty_when_taken_elsewhere_before_revert(): void
+    // ── Tinggal kelas & tahun tujuan tepat satu langkah ──────────────────────
+
+    public function test_a_student_may_stay_in_the_same_level_next_year(): void
     {
         $admin = $this->createAdmin();
-        $teacher = $this->createTeacher();
-        $source = $this->createClassroom([
-            'name' => 'XII MIPA 1',
-            'level' => '12',
-            'homeroom_teacher_id' => $teacher->id,
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom([
+            'name' => 'X MIPA 1',
+            'level' => '10',
+            'section' => '1',
+            'academic_year_id' => $this->yearId('2027/2028'),
         ]);
-        $other = $this->createClassroom(['name' => 'XI MIPA 2', 'level' => '11', 'section' => '2']);
         $student = $this->createStudentIn($source, 1);
 
-        $this->graduate($admin, $source, [$student->id])->assertSessionHasNoErrors();
+        $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
 
-        // Guru sudah dipakai rombel lain di tahun ajaran yang sama.
-        $other->update(['homeroom_teacher_id' => $teacher->id]);
+        $enrollment = $student->fresh()->currentEnrollment;
+        $this->assertSame($target->id, $enrollment->classroom_id);
+        $this->assertSame('10', $enrollment->classroom->level);
+    }
 
-        $batch = PromotionBatch::firstOrFail();
-        $this->actingAs($admin)->post(route('admin.classrooms.promotion.revert', $batch->id));
+    public function test_target_year_must_be_exactly_the_next_year(): void
+    {
+        $admin = $this->createAdmin();
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $far = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year_id' => $this->yearId('2028/2029')]);
+        $student = $this->createStudentIn($source, 1);
 
-        $source->refresh();
-        $this->assertTrue((bool) $source->is_active);
-        $this->assertNull($source->homeroom_teacher_id);
-        $this->assertSame($teacher->id, $other->fresh()->homeroom_teacher_id);
+        $this->promote($admin, $source, $far, [$student->id])
+            ->assertSessionHasErrors('target_classroom_id');
+
+        $this->assertSame($source->id, $student->fresh()->currentEnrollment->classroom_id);
     }
 
     // ── Keutuhan daftar siswa ───────────────────────────────────────────────
 
-    public function test_revert_skips_students_when_the_source_classroom_was_deleted(): void
+    public function test_revert_skips_students_when_the_source_classroom_is_gone(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
         $batch = PromotionBatch::firstOrFail();
 
-        // Rombel asal yang sudah kosong dihapus admin, sehingga posisi asal
-        // siswa tidak lagi bisa dipulihkan.
-        $source->delete();
+        // Rombel asal tidak lagi dapat dihapus karena menyimpan histori enrollment,
+        // sehingga jejak auditnya dikosongkan untuk mensimulasikan kondisi itu.
+        $batch->items()->update(['from_classroom_id' => null]);
 
         $this->actingAs($admin)->post(route('admin.classrooms.promotion.revert', $batch->id));
 
@@ -386,11 +323,11 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_promotion_into_an_inactive_classroom_is_rejected(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
         $target = $this->createClassroom([
             'name' => 'XI MIPA 1',
             'level' => '11',
-            'academic_year' => '2027/2028',
+            'academic_year_id' => $this->yearId('2027/2028'),
             'is_active' => false,
         ]);
         $student = $this->createStudentIn($source, 1);
@@ -404,8 +341,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_students_must_still_be_active_in_the_source_classroom(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
 
         $active = $this->createStudentIn($source, 1);
         $dropped = $this->createStudentIn($source, 2, 'dropped');
@@ -419,8 +356,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_duplicate_student_ids_are_rejected(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id, $student->id])
@@ -432,8 +369,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_student_selection_cannot_exceed_classroom_capacity(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
 
         $ids = [];
         for ($i = 0; $i <= Classroom::studentCapacity(); $i++) {
@@ -449,8 +386,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_promotion_is_recorded_as_an_audit_batch(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
@@ -479,8 +416,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_reverting_a_batch_restores_previous_state(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
         $studentA = $this->createStudentIn($source, 1);
         $studentB = $this->createStudentIn($source, 2);
 
@@ -508,9 +445,9 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_revert_skips_students_changed_since_the_batch(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
-        $elsewhere = $this->createClassroom(['name' => 'XI IPS 1', 'level' => '11', 'major' => 'IPS', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
+        $elsewhere = $this->createClassroom(['name' => 'XI IPS 1', 'level' => '11', 'major' => 'IPS', 'academic_year_id' => $this->yearId('2027/2028')]);
 
         $studentA = $this->createStudentIn($source, 1);
         $studentB = $this->createStudentIn($source, 2);
@@ -518,7 +455,10 @@ class ClassroomPromotionRulesTest extends TestCase
         $this->promote($admin, $source, $target, [$studentA->id, $studentB->id])->assertSessionHasNoErrors();
 
         // Siswa B dipindahkan lagi setelah batch berjalan.
-        $studentB->update(['classroom_id' => $elsewhere->id]);
+        StudentEnrollment::query()
+            ->where('student_id', $studentB->id)
+            ->whereNull('ended_at')
+            ->update(['classroom_id' => $elsewhere->id]);
 
         $batch = PromotionBatch::query()->latest('id')->firstOrFail();
         $this->actingAs($admin)->post(route('admin.classrooms.promotion.revert', $batch->id));
@@ -530,8 +470,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_batch_cannot_be_reverted_twice(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
@@ -546,8 +486,8 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_promotion_history_is_listed_on_the_page(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
         $student = $this->createStudentIn($source, 1);
 
         $this->promote($admin, $source, $target, [$student->id]);
@@ -564,7 +504,7 @@ class ClassroomPromotionRulesTest extends TestCase
     public function test_batch_items_are_kept_in_sync_with_batch_count(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'academic_year' => '2026/2027']);
+        $source = $this->createClassroom(['name' => 'XII MIPA 1', 'level' => '12', 'academic_year_id' => $this->yearId('2026/2027')]);
         $studentA = $this->createStudentIn($source, 1);
         $studentB = $this->createStudentIn($source, 2);
 

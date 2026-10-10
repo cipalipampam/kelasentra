@@ -59,7 +59,7 @@
                         </span>
                         @if($student->student?->classroom)
                             <span class="badge bg-info-subtle text-info border border-info-subtle px-2.5 py-1" style="font-size: 0.75rem;">
-                                <i class="bi bi-calendar3 me-1"></i>TA {{ $student->student->classroom->academic_year }}
+                                <i class="bi bi-calendar3 me-1"></i>TA {{ $student->student->classroom->academicYear?->name }}
                             </span>
                         @endif
                         @php($studentStatus = $student->student?->academic_status ?? 'active')

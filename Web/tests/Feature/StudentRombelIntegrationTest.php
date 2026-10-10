@@ -8,6 +8,7 @@ use App\Models\Classroom;
 use App\Models\Student;
 use App\Models\User;
 use App\Rules\EnrollableClassroom;
+use App\Services\Shared\Attendance\AttendanceContext;
 use App\Services\Web\Academic\ClassroomService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,7 +28,7 @@ class StudentRombelIntegrationTest extends TestCase
         parent::setUp();
         $this->seed(RoleSeeder::class);
 
-        AcademicYear::create(['name' => '2026/2027', 'status' => AcademicYear::STATUS_ACTIVE]);
+        AcademicYear::create(['name' => '2026/2027', 'status' => AcademicYear::STATUS_CURRENT]);
     }
 
     private function createAdmin(): User
@@ -45,22 +46,30 @@ class StudentRombelIntegrationTest extends TestCase
             'level' => '11',
             'major' => 'MIPA',
             'section' => '1',
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
             'is_active' => true,
         ], $attributes));
     }
 
     private function createStudent(Classroom $classroom, array $attributes = []): Student
     {
-        $user = User::factory()->create();
-        $user->assignRole('siswa');
+        $status = $attributes['academic_status'] ?? 'active';
 
-        return Student::create(array_merge([
-            'user_id' => $user->id,
-            'classroom_id' => $classroom->id,
-            'grade' => $classroom->name,
-            'academic_status' => 'active',
-        ], $attributes));
+        $student = $this->enrollStudent($classroom, $attributes['nis'] ?? 'S'.$classroom->id.'-'.uniqid(), $status);
+
+        // Siswa non-aktif tidak boleh punya enrollment berjalan.
+        if ($status !== 'active') {
+            $student->currentEnrollment()->update(['ended_at' => now()->toDateString()]);
+        }
+
+        return $student;
+    }
+
+    private function studentIn(Classroom $classroom): Student
+    {
+        return Student::query()
+            ->whereHas('currentEnrollment', fn ($enrollment) => $enrollment->where('classroom_id', $classroom->id))
+            ->firstOrFail();
     }
 
     private function fillClassroom(Classroom $classroom, int $count): void
@@ -104,7 +113,7 @@ class StudentRombelIntegrationTest extends TestCase
 
         $student = Student::firstOrFail();
         $this->assertSame($classroom->id, $student->classroom_id);
-        $this->assertSame('X BAHASA 2', $student->getRawOriginal('grade'));
+        $this->assertSame('X BAHASA 2', $student->grade);
         $this->assertSame('active', $student->academic_status);
     }
 
@@ -125,9 +134,9 @@ class StudentRombelIntegrationTest extends TestCase
     public function test_store_rejects_a_rombel_from_a_past_academic_year(): void
     {
         $admin = $this->createAdmin();
-        AcademicYear::create(['name' => '2025/2026', 'status' => AcademicYear::STATUS_ARCHIVED]);
+        AcademicYear::create(['name' => '2025/2026', 'status' => AcademicYear::STATUS_CLOSED]);
 
-        $classroom = $this->createClassroom(['name' => 'XI MIPA 1', 'academic_year' => '2025/2026']);
+        $classroom = $this->createClassroom(['name' => 'XI MIPA 1', 'academic_year_id' => $this->yearId('2025/2026')]);
 
         $response = $this->actingAs($admin)->post(route('admin.students.store'), $this->payload([
             'classroom_id' => $classroom->id,
@@ -173,7 +182,7 @@ class StudentRombelIntegrationTest extends TestCase
         $classroom = $this->createClassroom();
         $this->fillClassroom($classroom, Classroom::studentCapacity());
 
-        $student = $classroom->students()->firstOrFail();
+        $student = $this->studentIn($classroom);
 
         $response = $this->actingAs($admin)->put(route('admin.students.update', $student->user_id), $this->payload([
             'name' => 'Nama Diperbarui',
@@ -229,10 +238,10 @@ class StudentRombelIntegrationTest extends TestCase
         $this->createClassroom(['name' => 'XI MIPA 1', 'section' => '1']);
 
         AcademicYear::create(['name' => '2027/2028', 'status' => AcademicYear::STATUS_UPCOMING]);
-        $upcoming = $this->createClassroom(['name' => 'XI MIPA 2', 'section' => '2', 'academic_year' => '2027/2028']);
+        $upcoming = $this->createClassroom(['name' => 'XI MIPA 2', 'section' => '2', 'academic_year_id' => $this->yearId('2027/2028')]);
 
-        AcademicYear::create(['name' => '2025/2026', 'status' => AcademicYear::STATUS_ARCHIVED]);
-        $past = $this->createClassroom(['name' => 'XI MIPA 9', 'section' => '9', 'academic_year' => '2025/2026']);
+        AcademicYear::create(['name' => '2025/2026', 'status' => AcademicYear::STATUS_CLOSED]);
+        $past = $this->createClassroom(['name' => 'XI MIPA 9', 'section' => '9', 'academic_year_id' => $this->yearId('2025/2026')]);
 
         $response = $this->actingAs($admin)->get(route('admin.students.index'));
 
@@ -250,7 +259,7 @@ class StudentRombelIntegrationTest extends TestCase
         $upcoming = $this->createClassroom([
             'name' => 'X MIPA 1',
             'level' => '10',
-            'academic_year' => '2027/2028',
+            'academic_year_id' => $this->yearId('2027/2028'),
         ]);
 
         $response = $this->actingAs($admin)->post(route('admin.students.store'), $this->payload([
@@ -271,11 +280,12 @@ class StudentRombelIntegrationTest extends TestCase
         $studentB = $this->createStudent($second, ['nis' => 'N-B']);
 
         foreach ([$studentA, $studentB] as $student) {
-            Attendance::create([
+            // Filter rombel memakai snapshot konteks akademik saat presensi dicatat.
+            Attendance::create(array_merge(AttendanceContext::forUser($student->user), [
                 'user_id' => $student->user_id,
                 'recorded_at' => now(),
                 'status' => 'present',
-            ]);
+            ]));
         }
 
         $response = $this->actingAs($admin)->get(route('admin.attendances.students', [
@@ -341,7 +351,7 @@ class StudentRombelIntegrationTest extends TestCase
         $classroom = $this->createClassroom();
         $this->fillClassroom($classroom, Classroom::studentCapacity());
 
-        $student = $classroom->students()->firstOrFail();
+        $student = $this->studentIn($classroom);
 
         $response = $this->actingAs($admin)->get(route('admin.students.edit', $student->user_id));
 
@@ -359,5 +369,39 @@ class StudentRombelIntegrationTest extends TestCase
         $response = $this->actingAs($admin)->get(route('admin.students.create'));
 
         $response->assertOk()->assertSee('Belum ada rombel aktif dengan kursi tersisa');
+    }
+
+    public function test_marking_a_student_as_transferred_closes_the_enrollment(): void
+    {
+        $admin = $this->createAdmin();
+        $classroom = $this->createClassroom();
+        $student = $this->createStudent($classroom);
+
+        $response = $this->actingAs($admin)->put(route('admin.students.update', $student->user_id), $this->payload([
+            'name' => $student->user->name,
+            'email' => $student->user->email,
+            'academic_status' => 'transferred',
+        ]));
+
+        $response->assertSessionHasNoErrors();
+
+        $fresh = $student->fresh();
+        $this->assertSame('transferred', $fresh->academic_status);
+        $this->assertNull($fresh->currentEnrollment);
+    }
+
+    public function test_reactivating_a_student_requires_a_rombel(): void
+    {
+        $admin = $this->createAdmin();
+        $classroom = $this->createClassroom();
+        $student = $this->createStudent($classroom, ['academic_status' => 'transferred']);
+
+        $response = $this->actingAs($admin)->put(route('admin.students.update', $student->user_id), $this->payload([
+            'name' => $student->user->name,
+            'email' => $student->user->email,
+            'academic_status' => 'active',
+        ]));
+
+        $response->assertSessionHasErrors('classroom_id');
     }
 }
