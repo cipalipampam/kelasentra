@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web\Academic;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\Academic\StoreScheduleRequest;
 use App\Http\Requests\Web\Academic\UpdateScheduleRequest;
+use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\Schedule;
 use App\Models\Subject;
@@ -24,15 +25,28 @@ class ScheduleController extends Controller
 
     public function index(Request $request): View
     {
-        $classrooms = Classroom::where('is_active', true)->orderBy('level')->orderBy('name')->get();
+        $academicYears = AcademicYear::operableYears();
+        $selectedAcademicYearId = $request->integer('academic_year_id')
+            ?: (int) (AcademicYear::currentYear()?->getKey() ?? $academicYears->first()?->getKey());
+
+        $classrooms = Classroom::query()
+            ->where('academic_year_id', $selectedAcademicYearId)
+            ->where('is_active', true)
+            ->orderBy('level')
+            ->orderBy('name')
+            ->get();
+
         $subjects = Subject::where('is_active', true)->orderBy('cluster')->orderBy('name')->get();
         $teachers = User::role('guru')->with('subjects')->orderBy('name')->get();
 
         $selectedClassroomId = $request->input('classroom_id', $classrooms->first()?->id);
         $selectedDay = $request->input('day_of_week');
 
-        $query = Schedule::with(['classroom', 'subject', 'teacher'])
-            ->when($selectedClassroomId, fn ($q) => $q->where('classroom_id', $selectedClassroomId))
+        $query = Schedule::with(['assignment.classroom', 'assignment.subject', 'assignment.teacher'])
+            ->when($selectedClassroomId, fn ($q) => $q->whereHas(
+                'assignment',
+                fn ($assignment) => $assignment->where('classroom_id', $selectedClassroomId),
+            ))
             ->when($selectedDay, fn ($q) => $q->where('day_of_week', $selectedDay));
 
         $schedules = $query->orderBy('day_of_week')->orderBy('start_time')->get();
@@ -58,7 +72,9 @@ class ScheduleController extends Controller
             'selectedClassroomId',
             'selectedDay',
             'totalJp',
-            'activeClassroom'
+            'activeClassroom',
+            'academicYears',
+            'selectedAcademicYearId'
         ));
     }
 
@@ -87,6 +103,7 @@ class ScheduleController extends Controller
 
             return redirect()->route('admin.schedules.index', ['classroom_id' => $schedule->classroom_id])
                 ->with('success', 'Jadwal pelajaran berhasil diperbarui.');
+
         } catch (ValidationException $e) {
             return redirect()->back()
                 ->withErrors($e->errors())

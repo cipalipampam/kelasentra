@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Web\Academic;
 
+use App\Rules\EligibleTeachingTeacher;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateScheduleRequest extends FormRequest
@@ -16,7 +17,7 @@ class UpdateScheduleRequest extends FormRequest
         return [
             'classroom_id' => ['required', 'exists:classrooms,id'],
             'subject_id' => ['required', 'exists:subjects,id'],
-            'teacher_id' => ['required', 'exists:users,id'],
+            'teacher_id' => ['required', 'exists:users,id', new EligibleTeachingTeacher($this->integer('subject_id') ?: null)],
             'day_of_week' => ['required', 'integer', 'between:1,5'],
             'start_time' => ['required', 'date_format:H:i'],
             'end_time' => ['required', 'date_format:H:i', 'after:start_time'],
@@ -38,4 +39,3 @@ class UpdateScheduleRequest extends FormRequest
         ];
     }
 }
-

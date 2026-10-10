@@ -118,7 +118,17 @@
     <div class="card border-0 shadow-sm mb-4">
         <div class="card-body p-3">
             <form method="GET" action="{{ route('admin.schedules.index') }}" class="js-live-filter row g-2 align-items-center">
-                <div class="col-md-6">
+                <div class="col-md-3">
+                    <label class="form-label text-muted small fw-semibold mb-1">Tahun Ajaran</label>
+                    <select name="academic_year_id" class="form-select form-select-sm" onchange="this.form.submit()">
+                        @foreach($academicYears as $year)
+                            <option value="{{ $year->id }}" @selected($selectedAcademicYearId == $year->id)>
+                                {{ $year->name }} — {{ $year->statusLabel() }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-5">
                     <label class="form-label text-muted small fw-semibold mb-1">Pilih Rombel / Kelas</label>
                     <select name="classroom_id" class="form-select form-select-sm">
                         @foreach($classrooms as $cls)
@@ -128,7 +138,7 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="form-label text-muted small fw-semibold mb-1">Filter Hari</label>
                     <select name="day_of_week" class="form-select form-select-sm">
                         <option value="">Semua Hari (Senin - Jumat)</option>

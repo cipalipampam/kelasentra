@@ -71,7 +71,7 @@ class ScheduleWorkloadTest extends TestCase
             'level' => '10',
             'major' => 'MIPA',
             'section' => '1',
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
         ]);
 
         $this->classroomB = Classroom::create([
@@ -79,13 +79,13 @@ class ScheduleWorkloadTest extends TestCase
             'level' => '11',
             'major' => 'MIPA',
             'section' => '1',
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
         ]);
     }
 
     public function test_schedule_model_calculates_minutes_and_jp_correctly(): void
     {
-        $sched = Schedule::create([
+        $sched = $this->createSchedule([
             'classroom_id' => $this->classroomA->id,
             'subject_id' => $this->mainSubject->id,
             'teacher_id' => $this->teacher->id,
@@ -145,7 +145,7 @@ class ScheduleWorkloadTest extends TestCase
     public function test_prevents_teacher_schedule_clash(): void
     {
         // Buat jadwal pertama di kelas A
-        Schedule::create([
+        $this->createSchedule([
             'classroom_id' => $this->classroomA->id,
             'subject_id' => $this->mainSubject->id,
             'teacher_id' => $this->teacher->id,
@@ -174,7 +174,7 @@ class ScheduleWorkloadTest extends TestCase
         $otherTeacher->subjects()->attach($this->mainSubject->id, ['is_primary' => true]);
 
         // Kelas A sudah ada jadwal pada Senin 07:15 - 08:45
-        Schedule::create([
+        $this->createSchedule([
             'classroom_id' => $this->classroomA->id,
             'subject_id' => $this->mainSubject->id,
             'teacher_id' => $this->teacher->id,
@@ -199,7 +199,7 @@ class ScheduleWorkloadTest extends TestCase
     public function test_teacher_weekly_workload_calculation_and_status(): void
     {
         // 1. Tambah 1 jadwal 90 menit (2 JP) -> status underload (<24 JP)
-        Schedule::create([
+        $this->createSchedule([
             'classroom_id' => $this->classroomA->id,
             'subject_id' => $this->mainSubject->id,
             'teacher_id' => $this->teacher->id,
@@ -227,7 +227,7 @@ class ScheduleWorkloadTest extends TestCase
         foreach ($days as $d) {
             foreach ($times as $t) {
                 if ($added >= 11) break 2;
-                Schedule::create([
+                $this->createSchedule([
                     'classroom_id' => $this->classroomB->id,
                     'subject_id' => $this->cognateSubject->id,
                     'teacher_id' => $this->teacher->id,
@@ -252,7 +252,7 @@ class ScheduleWorkloadTest extends TestCase
         $admin = User::factory()->create();
         $admin->assignRole('admin');
 
-        Schedule::create([
+        $this->createSchedule([
             'classroom_id' => $this->classroomA->id,
             'subject_id' => $this->mainSubject->id,
             'teacher_id' => $this->teacher->id,

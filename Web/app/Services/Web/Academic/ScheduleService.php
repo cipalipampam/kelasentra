@@ -2,14 +2,22 @@
 
 namespace App\Services\Web\Academic;
 
+use App\Models\AcademicYear;
+use App\Models\Classroom;
 use App\Models\Schedule;
 use App\Models\Subject;
+use App\Models\TeachingAssignment;
 use App\Models\User;
+use App\Rules\EligibleTeachingTeacher;
 use Carbon\Carbon;
 use Illuminate\Validation\ValidationException;
 
 class ScheduleService
 {
+    public function __construct(
+        private readonly TeachingAssignmentService $assignments,
+    ) {}
+
     public const JP_MINUTES = 45;
     public const MIN_JP_PER_WEEK = 24;
     public const MAX_JP_PER_WEEK = 40;
@@ -19,11 +27,18 @@ class ScheduleService
     /**
      * Menghitung rincian beban mengajar guru secara komprehensif.
      */
-    public function calculateTeacherWeeklyWorkload(User $teacher): array
+    public function calculateTeacherWeeklyWorkload(User $teacher, ?AcademicYear $academicYear = null): array
     {
-        $schedules = Schedule::with(['subject', 'classroom'])
-            ->where('teacher_id', $teacher->id)
+        $academicYear ??= AcademicYear::currentYear();
+
+        $schedules = Schedule::query()
+            ->with(['assignment.subject', 'assignment.classroom'])
             ->where('is_active', true)
+            ->whereHas('assignment', fn ($assignment) => $assignment->where('teacher_id', $teacher->getKey()))
+            ->when($academicYear !== null, fn ($query) => $query->whereHas(
+                'assignment.classroom',
+                fn ($classroom) => $classroom->where('academic_year_id', $academicYear->getKey()),
+            ))
             ->orderBy('day_of_week')
             ->orderBy('start_time')
             ->get();
@@ -189,27 +204,32 @@ class ScheduleService
             ]);
         }
 
-        // 4. Linieritas Guru-Mata Pelajaran (Guru hanya boleh mengajar mapel yang terdaftar di profile)
-        $teacher = User::with('subjects')->find($teacherId);
+        // 4. Kelayakan guru: peran guru, tenaga pengajar aktif, dan linier mapel.
+        $teacher = User::with(['employee', 'subjects'])->find($teacherId);
         if (! $teacher) {
             throw ValidationException::withMessages([
                 'teacher_id' => 'Data guru tidak ditemukan.',
             ]);
         }
 
-        $canTeach = $teacher->subjects()->where('subjects.id', $subjectId)->exists();
-        if (! $canTeach) {
-            $subject = Subject::find($subjectId);
-            $subjectName = $subject ? $subject->name : 'mata pelajaran tersebut';
+        if ($reason = EligibleTeachingTeacher::reason($teacher, $subjectId)) {
             throw ValidationException::withMessages([
-                'teacher_id' => "Guru {$teacher->name} tidak terdaftar linier untuk mengajar mapel {$subjectName}.",
+                'teacher_id' => $reason,
             ]);
         }
 
-        // 5. Anti-Bentrok Guru (Teacher Clash)
-        $teacherClash = Schedule::with(['classroom', 'subject'])
-            ->where('teacher_id', $teacherId)
+        $academicYearId = Classroom::query()->whereKey($classroomId)->value('academic_year_id');
+
+        // 5. Anti-Bentrok Guru, dibatasi tahun ajaran yang sama agar penyusunan
+        //    jadwal tahun berikutnya tidak dianggap bentrok.
+        $teacherClash = Schedule::query()
+            ->with(['assignment.classroom'])
             ->where('is_active', true)
+            ->whereHas('assignment', fn ($assignment) => $assignment->where('teacher_id', $teacherId))
+            ->when($academicYearId !== null, fn ($query) => $query->whereHas(
+                'assignment.classroom',
+                fn ($clashClassroom) => $clashClassroom->where('academic_year_id', $academicYearId),
+            ))
             ->overlapping($dayOfWeek, $startTime, $end_time, $ignoreScheduleId)
             ->first();
 
@@ -221,10 +241,11 @@ class ScheduleService
             ]);
         }
 
-        // 6. Anti-Bentrok Ruang Kelas / Rombel (Classroom Clash)
-        $classroomClash = Schedule::with(['subject', 'teacher'])
-            ->where('classroom_id', $classroomId)
+        // 6. Anti-Bentrok Rombel (satu rombel hanya milik satu tahun ajaran)
+        $classroomClash = Schedule::query()
+            ->with(['assignment.subject'])
             ->where('is_active', true)
+            ->whereHas('assignment', fn ($assignment) => $assignment->where('classroom_id', $classroomId))
             ->overlapping($dayOfWeek, $startTime, $end_time, $ignoreScheduleId)
             ->first();
 
@@ -244,9 +265,7 @@ class ScheduleService
     {
         $this->validateScheduleSlot($data);
 
-        $data['is_active'] = (bool) ($data['is_active'] ?? true);
-
-        return Schedule::create($data);
+        return Schedule::create($this->scheduleAttributes($data));
     }
 
     /**
@@ -254,13 +273,34 @@ class ScheduleService
      */
     public function updateSchedule(Schedule $schedule, array $data): bool
     {
-        $this->validateScheduleSlot($data, $schedule->id);
+        $this->validateScheduleSlot($data, $schedule->getKey());
 
-        if (array_key_exists('is_active', $data)) {
-            $data['is_active'] = (bool) $data['is_active'];
-        }
+        return $schedule->update($this->scheduleAttributes($data, $schedule));
+    }
 
-        return $schedule->update($data);
+    /**
+     * Menyiapkan atribut jadwal, termasuk penugasan guru yang menjadi konteksnya.
+     *
+     * @return array<string, mixed>
+     */
+    private function scheduleAttributes(array $data, ?Schedule $schedule = null): array
+    {
+        $assignment = $this->assignments->assign(
+            Classroom::findOrFail($data['classroom_id']),
+            Subject::findOrFail($data['subject_id']),
+            User::findOrFail($data['teacher_id']),
+        );
+
+        return [
+            'teaching_assignment_id' => $assignment->getKey(),
+            'day_of_week' => $data['day_of_week'],
+            'start_time' => $data['start_time'],
+            'end_time' => $data['end_time'],
+            'room' => $data['room'] ?? null,
+            'is_active' => array_key_exists('is_active', $data)
+                ? (bool) $data['is_active']
+                : ($schedule?->is_active ?? true),
+        ];
     }
 
     /**
