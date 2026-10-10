@@ -7,115 +7,127 @@ use App\Models\Classroom;
 use App\Models\Schedule;
 use App\Models\ScheduleAttendance;
 use App\Models\Student;
-use Carbon\Carbon;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 /**
- * Seed riwayat absensi mata pelajaran untuk seluruh siswa aktif pada
- * rombel tahun ajaran aktif.
+ * Presensi mata pelajaran (absensi per jam) untuk beberapa hari terakhir.
  *
- * Distribusi status per pertemuan: 85% hadir, 5% terlambat, 5% sakit, 5% izin.
- * Penulisan memakai bulk insert agar ribuan rekaman tetap cepat.
+ * Setiap baris menyimpan `student_enrollment_id` dan `teacher_id` saat
+ * pencatatan, sama seperti yang ditulis ClassAttendanceService, sehingga
+ * riwayat absensi mapel tetap menunjuk konteks yang benar.
+ *
+ * Dua slot pertama tiap hari sengaja diisi: itulah yang tampil pada halaman
+ * presensi kelas di aplikasi mobile, termasuk fitur prefill dari presensi harian.
  */
 class ScheduleAttendanceSeeder extends Seeder
 {
-    private const HISTORY_DAYS = 7;
+    private const DAYS = 2;
 
-    private const INSERT_CHUNK = 500;
+    private const SUBJECT_SLOTS = 2;
+
+    private const CHUNK_SIZE = 200;
 
     public function run(): void
     {
-        $activeYear = AcademicYear::query()
-            ->where('status', AcademicYear::STATUS_ACTIVE)
-            ->orderByDesc('name')
-            ->first();
-
-        if (! $activeYear) {
-            $this->command->warn('⚠️ Belum ada tahun ajaran aktif. Jalankan AcademicYearSeeder lebih dulu.');
+        if (ScheduleAttendance::query()->exists()) {
+            $this->command?->warn('Presensi mata pelajaran sudah ada; ScheduleAttendanceSeeder dilewati.');
 
             return;
         }
 
-        $classroomIds = Classroom::query()->where('academic_year', $activeYear->name)->pluck('id');
+        $year = AcademicYear::currentYear();
 
-        $studentsByClassroom = Student::query()
-            ->whereIn('classroom_id', $classroomIds)
-            ->where('academic_status', 'active')
-            ->get(['id', 'classroom_id'])
-            ->groupBy('classroom_id');
-
-        $schedulesByClassroom = Schedule::query()
-            ->whereIn('classroom_id', $classroomIds)
-            ->where('is_active', true)
-            ->get(['id', 'classroom_id', 'teacher_id', 'day_of_week', 'start_time'])
-            ->groupBy('classroom_id');
-
-        if ($studentsByClassroom->isEmpty() || $schedulesByClassroom->isEmpty()) {
-            $this->command->warn('⚠️ Belum ada siswa aktif atau jadwal untuk di-seed absensinya.');
+        if ($year === null) {
+            $this->command?->warn('Tahun ajaran berjalan belum ada; ScheduleAttendanceSeeder dilewati.');
 
             return;
         }
+
+        $cutoff = DemoData::dataCutoff($year->end_date);
+        $dates = DemoData::schoolDays($cutoff, self::DAYS, $year->start_date);
+        $classrooms = Classroom::query()->where('academic_year_id', $year->getKey())->get();
 
         $rows = [];
-        $now = Carbon::now();
 
-        for ($offset = self::HISTORY_DAYS; $offset >= 0; $offset--) {
-            $date = Carbon::today()->subDays($offset);
+        foreach ($classrooms as $classroom) {
+            $students = Student::query()
+                ->with('currentEnrollment')
+                ->where('academic_status', 'active')
+                ->whereHas('currentEnrollment', fn ($query) => $query->where('classroom_id', $classroom->getKey()))
+                ->orderBy('id')
+                ->get();
 
-            // Skip Minggu (0)
-            if ($date->dayOfWeek === Carbon::SUNDAY) {
+            if ($students->isEmpty()) {
                 continue;
             }
 
-            foreach ($schedulesByClassroom as $classroomId => $schedules) {
-                $students = $studentsByClassroom->get($classroomId);
+            foreach ($dates as $dateIndex => $date) {
+                $schedules = $this->schedulesFor($classroom, $date);
 
-                if (! $students) {
-                    continue;
-                }
-
-                foreach ($schedules->where('day_of_week', $date->dayOfWeek) as $schedule) {
-                    foreach ($students as $student) {
-                        $attendance = $this->randomAttendance();
-                        $recordedAt = Carbon::parse($date->toDateString().' '.$schedule->start_time)->addMinutes(rand(5, 20));
-
-                        $rows[] = [
-                            'schedule_id' => $schedule->id,
-                            'student_id' => $student->id,
-                            'teacher_id' => $schedule->teacher_id,
-                            'attendance_date' => $date->toDateString(),
-                            'status' => $attendance['status'],
-                            'notes' => $attendance['notes'],
-                            'recorded_at' => $recordedAt,
-                            'created_at' => $now,
-                            'updated_at' => $now,
-                        ];
+                foreach ($schedules as $schedule) {
+                    foreach ($students->values() as $index => $student) {
+                        $rows[] = $this->row($schedule, $student, $date, $index);
                     }
                 }
             }
         }
 
-        foreach (array_chunk($rows, self::INSERT_CHUNK) as $chunk) {
-            ScheduleAttendance::query()->insertOrIgnore($chunk);
+        foreach (array_chunk($rows, self::CHUNK_SIZE) as $chunk) {
+            ScheduleAttendance::insert($chunk);
         }
 
-        $total = ScheduleAttendance::query()->count();
-
-        $this->command->info("✅ {$total} rekaman absensi mata pelajaran berhasil di-seed ({$studentsByClassroom->flatten()->count()} siswa aktif × ".self::HISTORY_DAYS.' hari terakhir).');
+        $this->command?->info(sprintf('✅ Presensi mapel: %d baris untuk %d hari terakhir.', count($rows), count($dates)));
     }
 
     /**
-     * @return array{status: string, notes: string|null}
+     * @return Collection<int, Schedule>
      */
-    private function randomAttendance(): array
+    private function schedulesFor(Classroom $classroom, string $date)
     {
-        $roll = rand(1, 100);
+        return Schedule::query()
+            ->with('assignment')
+            ->where('is_active', true)
+            ->where('day_of_week', Carbon::parse($date)->dayOfWeekIso)
+            ->whereHas('assignment', fn ($query) => $query->where('classroom_id', $classroom->getKey()))
+            ->orderBy('start_time')
+            ->limit(self::SUBJECT_SLOTS)
+            ->get();
+    }
 
-        return match (true) {
-            $roll <= 85 => ['status' => 'present', 'notes' => null],
-            $roll <= 90 => ['status' => 'late', 'notes' => 'Masuk setelah 10 menit pelajaran dimulai.'],
-            $roll <= 95 => ['status' => 'sick', 'notes' => 'Sakit flu, beristirahat di UKS.'],
-            default => ['status' => 'permission', 'notes' => 'Izin mengikuti lomba sekolah.'],
+    /**
+     * @return array<string, mixed>
+     */
+    private function row(Schedule $schedule, Student $student, string $date, int $index): array
+    {
+        $status = match ($index) {
+            0 => 'absent',
+            1 => 'late',
+            2 => 'sick',
+            3 => 'permission',
+            default => 'present',
         };
+
+        $recordedAt = $date.' '.substr((string) $schedule->end_time, 0, 8);
+
+        return [
+            'schedule_id' => $schedule->getKey(),
+            'student_id' => $student->getKey(),
+            'student_enrollment_id' => $student->currentEnrollment?->getKey(),
+            'teacher_id' => $schedule->assignment?->teacher_id,
+            'attendance_date' => $date,
+            'status' => $status,
+            'notes' => match ($status) {
+                'absent' => 'Alfa tanpa keterangan.',
+                'late' => 'Datang setelah bel berbunyi.',
+                'sick' => 'Sakit dengan surat dokter.',
+                'permission' => 'Izin mengikuti kegiatan sekolah.',
+                default => null,
+            },
+            'recorded_at' => $recordedAt,
+            'created_at' => $recordedAt,
+            'updated_at' => $recordedAt,
+        ];
     }
 }

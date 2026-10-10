@@ -6,354 +6,152 @@ use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\Student;
 use App\Models\User;
-use Illuminate\Database\Eloquent\Collection;
+use App\Services\Web\Academic\EnrollmentService;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 
 /**
- * Seed siswa untuk tahun ajaran aktif, plus alumni lulusan tahun ajaran
- * terarsip terakhir.
+ * Siswa demo beserta penempatan pertamanya.
  *
- * Model data hanya menyimpan satu `classroom_id` per siswa (bukan riwayat
- * per tahun), sehingga siswa aktif ditempatkan pada rombel tahun ajaran
- * aktif dan angkatan yang sudah lulus disimpan sebagai alumni
- * (academic_status = graduated, tanpa rombel).
- *
- * Nama dibangkitkan secara deterministik dari kumpulan nama, sehingga
- * mengulang seeder menghasilkan data yang sama.
+ * Satu angkatan hanya dibuatkan satu enrollment (kelas saat pertama tercatat).
+ * Perpindahan kelas tahun-tahun berikutnya dibentuk PromotionHistorySeeder
+ * lewat proses kenaikan kelas yang sebenarnya, sehingga riwayat penempatan dan
+ * batch auditnya konsisten dengan perilaku aplikasi.
  */
 class StudentSeeder extends Seeder
 {
-    public const STUDENTS_PER_CLASSROOM = 12;
-
-    private const FIRST_NAME_POOL_SIZE = 24;
-
-    private const LAST_NAME_POOL_SIZE = 32;
+    private const PASSWORD = 'siswa123';
 
     /**
-     * Langkah indeks nama belakang. 7 koprima dengan 32 sehingga nama belakang
-     * berganti setiap siswa, namun pasangan (nama depan, nama belakang) tetap
-     * unik untuk 96 siswa pertama setiap gender.
+     * @var list<array{entry: string, count: int, year: string, classroom: string}>
      */
-    private const LAST_NAME_STRIDE = 7;
-
-    private const MALE_FIRST_NAMES = [
-        'Ahmad', 'Budi', 'Dimas', 'Fajar', 'Rizki', 'Bagas',
-        'Reza', 'Galih', 'Alif', 'Farhan', 'Rizal', 'Kevin',
-        'Bayu', 'Yoga', 'Arif', 'Ilham', 'Naufal', 'Rian',
-        'Satria', 'Wahyu', 'Yusuf', 'Zaki', 'Daffa', 'Bintang',
+    private const COHORTS = [
+        // Angkatan 2024/2025: sekarang duduk di tingkat XII.
+        ['entry' => '2024/2025', 'count' => 12, 'year' => '2024/2025', 'classroom' => 'X MIPA 1'],
+        ['entry' => '2024/2025', 'count' => 12, 'year' => '2024/2025', 'classroom' => 'X MIPA 2'],
+        // Angkatan 2025/2026: sekarang duduk di tingkat XI.
+        ['entry' => '2025/2026', 'count' => 12, 'year' => '2025/2026', 'classroom' => 'X MIPA 1'],
+        ['entry' => '2025/2026', 'count' => 12, 'year' => '2025/2026', 'classroom' => 'X MIPA 2'],
+        // Angkatan 2023/2024: riwayat kelas X-nya di luar sistem, kini sudah lulus.
+        ['entry' => '2023/2024', 'count' => 12, 'year' => '2024/2025', 'classroom' => 'XI MIPA 1'],
+        ['entry' => '2023/2024', 'count' => 12, 'year' => '2024/2025', 'classroom' => 'XI MIPA 2'],
+        // Angkatan 2026/2027: siswa baru tahun ajaran berjalan.
+        ['entry' => '2026/2027', 'count' => 12, 'year' => '2026/2027', 'classroom' => 'X MIPA 1'],
+        ['entry' => '2026/2027', 'count' => 12, 'year' => '2026/2027', 'classroom' => 'X MIPA 2'],
     ];
 
-    private const FEMALE_FIRST_NAMES = [
-        'Siti', 'Dewi', 'Nabila', 'Aulia', 'Clarissa', 'Jessica',
-        'Tiara', 'Syifa', 'Annisa', 'Ratna', 'Melati', 'Putri',
-        'Ayu', 'Intan', 'Laras', 'Maya', 'Nadia', 'Rahma',
-        'Salma', 'Tania', 'Vina', 'Wulan', 'Zahra', 'Kirana',
-    ];
+    private int $serial = 0;
 
-    private const MALE_LAST_NAMES = [
-        'Pratama', 'Santoso', 'Maulana', 'Ramadhan', 'Sanjaya', 'Pamungkas',
-        'Tanuwijaya', 'Fahlevi', 'Syahputra', 'Rakasiwi', 'Firmansyah', 'Hidayat',
-        'Kusuma', 'Permana', 'Wijaya', 'Nugroho', 'Saputra', 'Setiawan',
-        'Hartono', 'Susanto', 'Wibowo', 'Handoko', 'Purnama', 'Siregar',
-        'Nugraha', 'Gunawan', 'Ardianto', 'Wicaksono', 'Prasetya', 'Mahendra',
-        'Simbolon', 'Sihombing',
-    ];
-
-    private const FEMALE_LAST_NAMES = [
-        'Anggraeni', 'Azzahra', 'Andini', 'Maharani', 'Hapsari', 'Wardani',
-        'Wandira', 'Lestari', 'Handayani', 'Pertiwi', 'Rahmawati', 'Kusumawati',
-        'Wulandari', 'Puspita', 'Utami', 'Novianti', 'Yuliana', 'Safitri',
-        'Amalia', 'Fitriani', 'Nabilah', 'Ramadhani', 'Cahyani', 'Widyastuti',
-        'Susanti', 'Rahayu', 'Marlina', 'Nuraini', 'Oktaviani', 'Salsabila',
-        'Maesaroh', 'Kartika',
-    ];
-
-    private const CITIES = [
-        'Jakarta', 'Bandung', 'Surabaya', 'Semarang', 'Yogyakarta', 'Medan',
-        'Malang', 'Bogor', 'Depok', 'Bekasi', 'Tangerang', 'Palembang',
-        'Makassar', 'Denpasar', 'Padang', 'Surakarta',
-    ];
-
-    private const STREETS = [
-        'Merdeka', 'Sudirman', 'Diponegoro', 'Gatot Subroto', 'Ahmad Yani',
-        'Pajajaran', 'Cendrawasih', 'Melati', 'Kartini', 'Veteran',
-    ];
-
-    private const RELIGIONS = [
-        'Islam', 'Islam', 'Islam', 'Islam', 'Islam', 'Islam', 'Kristen', 'Katolik',
-    ];
-
-    /**
-     * Akun siswa contoh yang selalu tersedia agar kredensial demo tetap valid.
-     */
-    private const DEMO_STUDENTS = [
-        'X-MIPA 1' => ['name' => 'Ahmad Rizki Pratama', 'email' => 'ahmad.rizki@siswa.sch.id', 'gender' => 'male'],
-        'XI-MIPA 1' => ['name' => 'Dimas Arya Pamungkas', 'email' => 'dimas.arya@siswa.sch.id', 'gender' => 'male'],
-        'XII-MIPA 1' => ['name' => 'Fajar Alfian Pratama', 'email' => 'fajar.alfian@siswa.sch.id', 'gender' => 'male'],
-    ];
+    private int $identityIndex = 0;
 
     public function run(): void
     {
-        $activeYear = AcademicYear::query()
-            ->where('status', AcademicYear::STATUS_ACTIVE)
-            ->orderByDesc('name')
-            ->first();
-
-        if (! $activeYear) {
-            $this->command->warn('⚠️ Belum ada tahun ajaran aktif. Jalankan AcademicYearSeeder lebih dulu.');
+        if (Student::query()->exists()) {
+            $this->command?->warn('Data siswa sudah ada; StudentSeeder dilewati.');
 
             return;
         }
 
-        $activeClassrooms = $this->orderedClassrooms($activeYear->name, null);
+        // Kata sandi demo sama untuk semua siswa; hash dihitung sekali agar
+        // seeding tidak menghabiskan waktu pada ratusan panggilan bcrypt.
+        $passwordHash = Hash::make(self::PASSWORD);
 
-        if ($activeClassrooms->isEmpty()) {
-            $this->command->warn("⚠️ Rombel tahun ajaran {$activeYear->name} belum ada. Jalankan ClassroomSeeder lebih dulu.");
+        $enrollments = app(EnrollmentService::class);
+        $years = AcademicYear::query()->get()->keyBy('name');
+        $classrooms = $this->classroomIndex();
 
-            return;
+        foreach (self::COHORTS as $cohort) {
+            $entryYear = $years->get($cohort['entry']);
+            $classroom = $classrooms->get($cohort['year'].'|'.$cohort['classroom']);
+
+            if ($entryYear === null || $classroom === null) {
+                $this->command?->warn("Angkatan {$cohort['entry']} dilewati: rombel {$cohort['classroom']} tidak ditemukan.");
+
+                continue;
+            }
+
+            for ($i = 0; $i < $cohort['count']; $i++) {
+                $student = $this->createStudent($entryYear, $passwordHash);
+                $enrollments->place($student, $classroom, $this->yearStartDate($classroom));
+            }
         }
 
-        $archivedYear = AcademicYear::query()
-            ->where('status', AcademicYear::STATUS_ARCHIVED)
-            ->orderByDesc('name')
-            ->first();
-
-        $roster = $this->buildRoster($activeYear, $archivedYear, $activeClassrooms);
-
-        $this->pruneStaleStudents($roster);
-
-        $this->persistRoster($roster);
-
-        $activeCount = count(array_filter($roster, fn ($row) => $row['academic_status'] === 'active'));
-        $alumniCount = count($roster) - $activeCount;
-
-        $this->command->info("✅ {$activeCount} siswa aktif di {$activeClassrooms->count()} rombel ({$activeYear->name}) + {$alumniCount} alumni berhasil di-seed.");
+        $this->createInactiveStudents($enrollments, $years, $classrooms, $passwordHash);
     }
 
     /**
-     * Susun seluruh daftar siswa aktif maupun alumni.
+     * Dua siswa non-aktif: satu pindah sekolah di tengah tahun 2025/2026 dan
+     * satu keluar pada tahun berjalan. Keduanya tidak menyisakan enrollment
+     * berjalan, sesuai aturan status akademik.
      *
-     * @param  Collection<int, Classroom>  $activeClassrooms
-     * @return list<array<string, mixed>>
+     * @param  Collection<string, Classroom>  $classrooms
+     * @param  Collection<string, AcademicYear>  $years
      */
-    private function buildRoster(AcademicYear $activeYear, ?AcademicYear $archivedYear, Collection $activeClassrooms): array
+    private function createInactiveStudents(EnrollmentService $enrollments, $years, $classrooms, string $passwordHash): void
     {
-        $activeStart = (int) substr($activeYear->name, 0, 4);
-        $entryYearByLevel = ['10' => $activeStart, '11' => $activeStart - 1, '12' => $activeStart - 2];
+        $transferredYear = $years->get('2025/2026');
+        $transferredClassroom = $classrooms->get('2025/2026|X MIPA 1');
 
-        $roster = [];
-        $usedEmails = [];
-        $nisSequence = [];
-        $phoneSequence = 0;
-        $maleIndex = 0;
-        $femaleIndex = 0;
-
-        foreach ($activeClassrooms as $classroom) {
-            $entryYear = $entryYearByLevel[$classroom->level] ?? $activeStart;
-            $demo = self::DEMO_STUDENTS[$classroom->name] ?? null;
-
-            if ($demo) {
-                $usedEmails[] = $demo['email'];
-                $roster[] = $this->makeRow(
-                    $demo['name'],
-                    $demo['email'],
-                    $demo['gender'],
-                    $classroom,
-                    'active',
-                    $entryYear,
-                    $nisSequence,
-                    $phoneSequence,
-                );
-            }
-
-            $slots = self::STUDENTS_PER_CLASSROOM - ($demo ? 1 : 0);
-
-            for ($i = 0; $i < $slots; $i++) {
-                $isMale = $i % 2 === 0;
-                $generated = $this->nextGeneratedName($isMale, $maleIndex, $femaleIndex, $usedEmails);
-
-                $roster[] = $this->makeRow(
-                    $generated['name'],
-                    $generated['email'],
-                    $isMale ? 'male' : 'female',
-                    $classroom,
-                    'active',
-                    $entryYear,
-                    $nisSequence,
-                    $phoneSequence,
-                );
-            }
+        if ($transferredYear !== null && $transferredClassroom !== null) {
+            $student = $this->createStudent($transferredYear, $passwordHash);
+            $enrollments->place($student, $transferredClassroom, $this->yearStartDate($transferredClassroom));
+            $enrollments->closeCurrent($student, '2026-01-12');
+            $student->update(['academic_status' => 'transferred']);
         }
 
-        if ($archivedYear) {
-            $alumniClassrooms = $this->orderedClassrooms($archivedYear->name, '12');
-            $alumniEntryYear = (int) substr($archivedYear->name, 0, 4) - 2;
+        $droppedYear = $years->get('2026/2027');
+        $droppedClassroom = $classrooms->get('2026/2027|X MIPA 2');
 
-            foreach ($alumniClassrooms as $classroom) {
-                for ($i = 0; $i < self::STUDENTS_PER_CLASSROOM; $i++) {
-                    $isMale = $i % 2 === 0;
-                    $generated = $this->nextGeneratedName($isMale, $maleIndex, $femaleIndex, $usedEmails, 'alumni.sch.id');
-
-                    $roster[] = $this->makeRow(
-                        $generated['name'],
-                        $generated['email'],
-                        $isMale ? 'male' : 'female',
-                        $classroom,
-                        'graduated',
-                        $alumniEntryYear,
-                        $nisSequence,
-                        $phoneSequence,
-                    );
-                }
-            }
+        if ($droppedYear !== null && $droppedClassroom !== null) {
+            $student = $this->createStudent($droppedYear, $passwordHash);
+            $enrollments->place($student, $droppedClassroom, $this->yearStartDate($droppedClassroom));
+            $enrollments->closeCurrent($student, '2026-09-18');
+            $student->update(['academic_status' => 'dropped']);
         }
-
-        return $roster;
     }
 
-    /**
-     * Rombel pada satu tahun ajaran, diurutkan agar MIPA selalu lebih dulu.
-     *
-     * @return Collection<int, Classroom>
-     */
-    private function orderedClassrooms(string $academicYear, ?string $level): Collection
+    private function createStudent(AcademicYear $entryYear, string $passwordHash): Student
     {
-        $majorRank = array_flip(ClassroomSeeder::MAJORS);
+        $index = $this->identityIndex++;
+        $identity = DemoData::studentIdentity($index);
+        $nis = $entryYear->start_year.str_pad((string) ++$this->serial, 3, '0', STR_PAD_LEFT);
 
-        return Classroom::query()
-            ->where('academic_year', $academicYear)
-            ->when($level !== null, fn ($query) => $query->where('level', $level))
-            ->get()
-            ->sortBy(fn (Classroom $classroom) => $classroom->level.'-'.($majorRank[$classroom->major] ?? 99))
-            ->values();
-    }
+        $user = User::create([
+            'name' => $identity['name'],
+            'email' => $nis.'@siswa.sekolah.test',
+            'password' => $passwordHash,
+        ]);
 
-    /**
-     * @param  array<int, int>  $nisSequence
-     * @return array<string, mixed>
-     */
-    private function makeRow(
-        string $name,
-        string $email,
-        string $gender,
-        Classroom $classroom,
-        string $academicStatus,
-        int $entryYear,
-        array &$nisSequence,
-        int &$phoneSequence,
-    ): array {
-        $sequence = ($nisSequence[$entryYear] ?? 0) + 1;
-        $nisSequence[$entryYear] = $sequence;
-        $phoneSequence++;
+        $user->assignRole('siswa');
 
-        // NIS diberikan saat siswa masuk (kelas X), NISN selalu 10 digit.
-        $nis = $entryYear.str_pad((string) $sequence, 3, '0', STR_PAD_LEFT);
-
-        return [
-            'name' => $name,
-            'email' => $email,
-            'classroom_id' => $academicStatus === 'graduated' ? null : $classroom->id,
-            'grade' => $classroom->name,
-            'academic_status' => $academicStatus,
+        return Student::create([
+            'user_id' => $user->getKey(),
+            'entry_academic_year_id' => $entryYear->getKey(),
             'nis' => $nis,
-            'nisn' => '000'.$nis,
-            'gender' => $gender,
-            'place_of_birth' => self::CITIES[$sequence % count(self::CITIES)],
-            'date_of_birth' => sprintf('%04d-%02d-%02d', $entryYear - 15, (($sequence * 3) % 12) + 1, (($sequence * 7) % 27) + 1),
-            'religion' => self::RELIGIONS[$sequence % count(self::RELIGIONS)],
-            'phone' => '0812'.str_pad((string) $phoneSequence, 7, '0', STR_PAD_LEFT),
-            'address' => 'Jl. '.self::STREETS[$sequence % count(self::STREETS)].' No.'.(($sequence % 90) + 1).', '.self::CITIES[($sequence * 5) % count(self::CITIES)],
-        ];
+            'nisn' => '000'.$entryYear->start_year.str_pad((string) $index, 3, '0', STR_PAD_LEFT),
+            'gender' => $identity['gender'],
+            'place_of_birth' => DemoData::birthPlace($index),
+            'date_of_birth' => DemoData::studentBirthDate($entryYear->start_year, $index),
+            'religion' => DemoData::religion($index),
+            'address' => DemoData::address($index),
+            'phone_number' => DemoData::phoneNumber($index),
+        ]);
     }
 
     /**
-     * Bangkitkan nama unik dari kumpulan nama, dengan memastikan email belum terpakai.
-     *
-     * @param  list<string>  $usedEmails
-     * @return array{name: string, email: string}
+     * @return Collection<string, Classroom>
      */
-    private function nextGeneratedName(bool $isMale, int &$maleIndex, int &$femaleIndex, array &$usedEmails, string $domain = 'siswa.sch.id'): array
+    private function classroomIndex()
     {
-        $pool = $isMale ? self::MALE_FIRST_NAMES : self::FEMALE_FIRST_NAMES;
-        $surnames = $isMale ? self::MALE_LAST_NAMES : self::FEMALE_LAST_NAMES;
-
-        while (true) {
-            $index = $isMale ? $maleIndex++ : $femaleIndex++;
-
-            $first = $pool[$index % self::FIRST_NAME_POOL_SIZE];
-            $last = $surnames[($index * self::LAST_NAME_STRIDE) % self::LAST_NAME_POOL_SIZE];
-            $email = strtolower($first.'.'.$last).'@'.$domain;
-
-            if (! in_array($email, $usedEmails, true)) {
-                $usedEmails[] = $email;
-
-                return ['name' => $first.' '.$last, 'email' => $email];
-            }
-        }
+        return Classroom::query()
+            ->with('academicYear')
+            ->get()
+            ->keyBy(fn (Classroom $classroom) => $classroom->academicYear->name.'|'.$classroom->name);
     }
 
-    /**
-     * Siswa (dan akunnya) yang tidak lagi masuk roster akan dihapus.
-     *
-     * @param  list<array<string, mixed>>  $roster
-     */
-    private function pruneStaleStudents(array $roster): void
+    private function yearStartDate(Classroom $classroom): ?string
     {
-        $keepEmails = array_column($roster, 'email');
-
-        $stale = User::query()->role('siswa')->whereNotIn('email', $keepEmails)->get();
-
-        foreach ($stale as $user) {
-            $this->command->warn("   ↻ Menghapus siswa lama di luar roster: {$user->email}");
-            $user->tokens()->delete();
-            $user->delete();
-        }
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $roster
-     */
-    private function persistRoster(array $roster): void
-    {
-        // Satu hash dipakai ulang agar seeding ratusan akun tetap cepat.
-        $hashedPassword = Hash::make('password123');
-
-        // Setelah pruning hanya siswa di roster yang tersisa. Lepaskan NIS/NISN
-        // lama sebelum penomoran ulang supaya tidak bertabrakan dengan nomor
-        // yang masih dipegang siswa lain pada unique index.
-        Student::query()->update(['nis' => null, 'nisn' => null]);
-
-        foreach ($roster as $data) {
-            $user = User::firstOrNew(['email' => $data['email']]);
-            $user->name = $data['name'];
-
-            if (! $user->exists) {
-                $user->password = $hashedPassword;
-            }
-
-            $user->save();
-
-            if (! $user->hasRole('siswa')) {
-                $user->assignRole('siswa');
-            }
-
-            Student::updateOrCreate(
-                ['user_id' => $user->id],
-                [
-                    'classroom_id' => $data['classroom_id'],
-                    'nis' => $data['nis'],
-                    'nisn' => $data['nisn'],
-                    'grade' => $data['grade'],
-                    'academic_status' => $data['academic_status'],
-                    'gender' => $data['gender'],
-                    'place_of_birth' => $data['place_of_birth'],
-                    'date_of_birth' => $data['date_of_birth'],
-                    'religion' => $data['religion'],
-                    'phone_number' => $data['phone'],
-                    'address' => $data['address'],
-                ]
-            );
-        }
+        return $classroom->academicYear?->start_date?->toDateString();
     }
 }

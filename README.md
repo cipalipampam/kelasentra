@@ -180,7 +180,7 @@ php artisan migrate --seed
 php artisan storage:link
 ```
 
-Seeder membuat role, akun demo, data siswa/guru/staff, pengumuman, riwayat presensi, dan konfigurasi sekolah awal.
+Seeder menyiapkan dataset demo lengkap: peran, akun admin, pengaturan sekolah, kronologi tahun ajaran, rombel beserta wali kelas, mata pelajaran, pegawai, siswa dengan riwayat penempatan, jadwal, presensi, pengumuman, dan notifikasi. Seluruhnya dihasilkan seeder sehingga `migrate:fresh --seed` langsung menghasilkan aplikasi yang terisi. Pada akhir proses, seeder mencetak ringkasan jumlah data dan kredensial akun demo di terminal.
 
 Untuk database lain, ubah `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, dan `DB_PASSWORD` pada `Web/.env` sebelum menjalankan migration.
 
@@ -244,7 +244,18 @@ Windows Firewall harus mengizinkan port `8000` dan `8080`. Android development s
 
 ## 👤 Data Demo
 
-`DatabaseSeeder` dapat membuat data awal untuk development. Kredensial akun tidak dicantumkan di dokumentasi publik; gunakan akun lokal Anda sendiri dan jangan memakai data demo untuk deployment.
+`DatabaseSeeder` membuat dataset demo lengkap agar setiap layar punya isi:
+
+| Kelompok | Isi |
+| --- | --- |
+| Akun & peran | 4 role, 1 admin, 15 pegawai (13 guru, 2 staff), 98 siswa |
+| Kronologi | 5 tahun ajaran (2023/2024 s.d. 2027/2028), 2026/2027 berjalan |
+| Akademik | 11 mata pelajaran, 18 rombel + wali kelas, 194 riwayat penempatan |
+| Mengajar | 66 penugasan, 120 slot jadwal (40 JP/minggu per rombel) |
+| Presensi | ±1.200 presensi gerbang (termasuk periode lama) & 288 presensi mapel |
+| Lain-lain | 10 batch riwayat kenaikan kelas/kelulusan, pengumuman, dan notifikasi |
+
+Riwayat kenaikan kelas dibentuk lewat proses promosi asli, dan presensi menyimpan konteks akademik saat dicatat, sehingga data demo konsisten dengan aturan domain. Data ini untuk pengembangan; **jangan dipakai di deployment**. Kredensial akun demo tidak ditulis di dokumen ini, melainkan dicetak oleh seeder di terminal (akun admin, guru, staff, dan siswa dengan kata sandi bawaan masing-masing) — ganti semuanya sebelum dipakai di lingkungan nyata.
 
 ## 🔌 API Mobile
 
@@ -336,6 +347,15 @@ Mobile memerlukan internet, lokasi, kamera, dan akses galeri untuk fitur terkait
 ### 📦 Storage
 
 Foto bukti presensi baru disimpan pada disk privat dan diakses melalui URL bertanda tangan sementara, sehingga tidak memerlukan `storage:link`. File lama pada disk public tetap didukung sebagai kompatibilitas. Jangan menyimpan kredensial production atau secret Reverb di repository.
+
+## 📚 Dokumentasi Domain
+
+Aturan akademik (tahun ajaran, enrollment siswa, kenaikan kelas, penugasan mengajar, dan presensi) beserta invariant-nya didokumentasikan di:
+
+- [`docs/academic-domain-spec.md`](docs/academic-domain-spec.md) — spesifikasi final: keputusan desain (D1–D14), daftar invariant, dan perubahan skema.
+- [`docs/refactor-task-plan.md`](docs/refactor-task-plan.md) — rencana kerja bertahap beserta status tiap tugas.
+
+Baca dokumen tersebut sebelum mengubah perilaku domain akademik.
 
 ## 🧪 Pengujian
 
