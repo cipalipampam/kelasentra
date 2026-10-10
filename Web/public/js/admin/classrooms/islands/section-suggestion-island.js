@@ -47,6 +47,8 @@ export function initSectionSuggestionIsland() {
     function suggest() {
         const level = levelSelect.value;
         const year = yearSelect.value;
+        // Nilai select berisi id tahun ajaran, sedangkan pesan menampilkan namanya.
+        const yearLabel = yearSelect.selectedOptions[0]?.dataset.yearName || year || '';
 
         if (!level || !year) {
             setHint('Nomor sesi terisi otomatis setelah tingkat, jurusan, dan tahun ajaran dipilih.');
@@ -59,7 +61,7 @@ export function initSectionSuggestionIsland() {
         const numeric = sessions.filter(session => /^\d+$/.test(session.section));
 
         let recommended = '1';
-        let message = `Belum ada rombel lain untuk tingkat ini di tahun ajaran ${year} — sesi dimulai dari 1.`;
+        let message = `Belum ada rombel lain untuk tingkat ini di tahun ajaran ${yearLabel} — sesi dimulai dari 1.`;
         let isWarning = false;
 
         if (numeric.length > 0) {

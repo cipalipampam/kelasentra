@@ -31,8 +31,8 @@
                     </div>
                 </div>
                 <div class="d-flex align-items-baseline gap-2">
-                    <h3 class="fw-bold text-success mb-0" style="font-size: 1.75rem; letter-spacing: -0.5px;">{{ $stats['active'] }}</h3>
-                    <span class="badge-status badge-present ms-1" style="font-size: 0.72rem;">Aktif</span>
+                    <h3 class="fw-bold text-success mb-0" style="font-size: 1.75rem; letter-spacing: -0.5px;">{{ $stats['current'] }}</h3>
+                    <span class="badge-status badge-present ms-1" style="font-size: 0.72rem;">Berjalan</span>
                 </div>
             </div>
         </div>
@@ -62,15 +62,15 @@
         <div class="card border-0 shadow-sm rounded-3 h-100">
             <div class="card-body p-3">
                 <div class="d-flex align-items-center justify-content-between mb-2">
-                    <span class="text-secondary text-uppercase fw-semibold" style="font-size: 0.72rem; letter-spacing: 0.05em;">Diarsipkan</span>
+                    <span class="text-secondary text-uppercase fw-semibold" style="font-size: 0.72rem; letter-spacing: 0.05em;">Selesai</span>
                     <div class="rounded-circle d-flex align-items-center justify-content-center"
                          style="width: 34px; height: 34px; background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0;">
                         <i class="bi bi-archive fs-6"></i>
                     </div>
                 </div>
                 <div class="d-flex align-items-baseline gap-2">
-                    <h3 class="fw-bold text-secondary mb-0" style="font-size: 1.75rem; letter-spacing: -0.5px;">{{ $stats['archived'] }}</h3>
-                    <span class="text-muted small ms-1">Arsip</span>
+                    <h3 class="fw-bold text-secondary mb-0" style="font-size: 1.75rem; letter-spacing: -0.5px;">{{ $stats['closed'] }}</h3>
+                    <span class="text-muted small ms-1">Selesai</span>
                 </div>
             </div>
         </div>

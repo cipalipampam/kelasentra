@@ -87,6 +87,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     Route::get('classrooms/promotion', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'promotion'])->name('classrooms.promotion');
     Route::post('classrooms/promotion', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'processPromotion'])->name('classrooms.promotion.process');
     Route::post('classrooms/promotion/{promotionBatch}/revert', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'revertPromotion'])->name('classrooms.promotion.revert');
+    Route::post('classrooms/duplicate', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'duplicateClassrooms'])->name('classrooms.duplicate');
     Route::get('classrooms/{classroom}/students', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'getStudents'])->name('classrooms.students');
     Route::resource('classrooms', \App\Http\Controllers\Web\Academic\ClassroomController::class)->except(['show', 'create', 'edit']);
     Route::resource('subjects', \App\Http\Controllers\Web\Academic\SubjectController::class)->except(['show', 'create', 'edit']);

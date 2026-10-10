@@ -48,10 +48,10 @@ class AcademicYearController extends Controller
 
     public function activate(AcademicYear $academicYear): RedirectResponse
     {
-        $this->academicYearService->setActive($academicYear);
+        $this->academicYearService->setCurrent($academicYear);
 
         return redirect()->route('admin.academic-years.index')
-            ->with('success', "Tahun ajaran {$academicYear->name} kini berstatus aktif.");
+            ->with('success', "Tahun ajaran {$academicYear->name} kini menjadi periode berjalan.");
     }
 
     public function destroy(AcademicYear $academicYear): RedirectResponse

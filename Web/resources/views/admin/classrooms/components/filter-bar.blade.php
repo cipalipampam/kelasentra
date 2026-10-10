@@ -2,6 +2,7 @@
 <div class="card border-0 shadow-sm rounded-3 mb-4">
     <div class="card-body p-3 p-md-3">
         <form action="{{ route('admin.classrooms.index') }}" method="GET" class="row g-3 align-items-end js-live-filter">
+            <input type="hidden" name="show_history" value="{{ request('show_history') ? '1' : '' }}">
             <div class="col-lg-4 col-md-12">
                 <label for="search" class="form-label small fw-semibold text-secondary mb-1">Cari Rombel</label>
                 <div class="input-group">
@@ -27,6 +28,19 @@
                         <option value="{{ $major }}" {{ request('major') === $major ? 'selected' : '' }}>{{ $major }}</option>
                     @endforeach
                 </select>
+            </div>
+            <div class="col-lg-12 d-flex align-items-center justify-content-end">
+                @if(request('show_history'))
+                    <a href="{{ route('admin.classrooms.index', array_merge(request()->except(['show_history', 'page']), ['level' => request('level'), 'major' => request('major'), 'search' => request('search')])) }}"
+                       class="btn btn-sm btn-outline-secondary border d-flex align-items-center gap-2" style="font-size: 0.8rem;">
+                        <i class="bi bi-eye-slash"></i> Sembunyikan Riwayat
+                    </a>
+                @else
+                    <a href="{{ route('admin.classrooms.index', array_merge(request()->query(), ['show_history' => '1'])) }}"
+                       class="btn btn-sm btn-outline-secondary border d-flex align-items-center gap-2" style="font-size: 0.8rem;">
+                        <i class="bi bi-clock-history"></i> Tampilkan Riwayat
+                    </a>
+                @endif
             </div>
         </form>
     </div>

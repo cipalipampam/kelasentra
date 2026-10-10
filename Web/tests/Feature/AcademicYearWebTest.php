@@ -35,7 +35,7 @@ class AcademicYearWebTest extends TestCase
     public function test_admin_can_view_academic_year_index(): void
     {
         $admin = $this->createAdmin();
-        $this->createAcademicYear('2026/2027', AcademicYear::STATUS_ACTIVE);
+        $this->createAcademicYear('2026/2027', AcademicYear::STATUS_CURRENT);
 
         $response = $this->actingAs($admin)->get(route('admin.academic-years.index'));
 
@@ -60,14 +60,14 @@ class AcademicYearWebTest extends TestCase
             'name' => '2026/2027',
             'start_date' => '2026-07-01',
             'end_date' => '2027-06-30',
-            'status' => AcademicYear::STATUS_ACTIVE,
+            'status' => AcademicYear::STATUS_CURRENT,
         ]);
 
         $response->assertRedirect(route('admin.academic-years.index'))->assertSessionHas('success');
 
         $this->assertDatabaseHas('academic_years', [
             'name' => '2026/2027',
-            'status' => AcademicYear::STATUS_ACTIVE,
+            'status' => AcademicYear::STATUS_CURRENT,
         ]);
     }
 
@@ -108,44 +108,44 @@ class AcademicYearWebTest extends TestCase
         $response->assertSessionHasErrors('name');
     }
 
-    public function test_only_one_academic_year_may_be_active(): void
+    public function test_only_one_academic_year_may_be_running(): void
     {
         $admin = $this->createAdmin();
-        $previous = $this->createAcademicYear('2026/2027', AcademicYear::STATUS_ACTIVE);
+        $previous = $this->createAcademicYear('2026/2027', AcademicYear::STATUS_CURRENT);
 
         $this->actingAs($admin)->post(route('admin.academic-years.store'), [
             'name' => '2027/2028',
-            'status' => AcademicYear::STATUS_ACTIVE,
+            'status' => AcademicYear::STATUS_CURRENT,
         ])->assertSessionHasNoErrors();
 
-        $this->assertSame(AcademicYear::STATUS_ARCHIVED, $previous->fresh()->status);
-        $this->assertSame(1, AcademicYear::query()->where('status', AcademicYear::STATUS_ACTIVE)->count());
+        $this->assertSame(AcademicYear::STATUS_CLOSED, $previous->fresh()->status);
+        $this->assertSame(1, AcademicYear::query()->where('status', AcademicYear::STATUS_CURRENT)->count());
     }
 
     public function test_admin_can_activate_an_academic_year(): void
     {
         $admin = $this->createAdmin();
-        $current = $this->createAcademicYear('2026/2027', AcademicYear::STATUS_ACTIVE);
+        $current = $this->createAcademicYear('2026/2027', AcademicYear::STATUS_CURRENT);
         $upcoming = $this->createAcademicYear('2027/2028', AcademicYear::STATUS_UPCOMING);
 
         $response = $this->actingAs($admin)->post(route('admin.academic-years.activate', $upcoming->id));
 
         $response->assertRedirect(route('admin.academic-years.index'))->assertSessionHas('success');
 
-        $this->assertSame(AcademicYear::STATUS_ACTIVE, $upcoming->fresh()->status);
-        $this->assertSame(AcademicYear::STATUS_ARCHIVED, $current->fresh()->status);
+        $this->assertSame(AcademicYear::STATUS_CURRENT, $upcoming->fresh()->status);
+        $this->assertSame(AcademicYear::STATUS_CLOSED, $current->fresh()->status);
     }
 
     public function test_academic_year_in_use_by_classroom_cannot_be_deleted(): void
     {
         $admin = $this->createAdmin();
-        $academicYear = $this->createAcademicYear('2026/2027', AcademicYear::STATUS_ACTIVE);
+        $academicYear = $this->createAcademicYear('2026/2027', AcademicYear::STATUS_CURRENT);
 
         Classroom::create([
             'name' => 'X MIPA 1',
             'level' => '10',
             'section' => '1',
-            'academic_year' => $academicYear->name,
+            'academic_year_id' => $academicYear->id,
             'is_active' => true,
         ]);
 
@@ -175,13 +175,13 @@ class AcademicYearWebTest extends TestCase
             'name' => '2026/2027',
             'start_date' => '2026-07-01',
             'end_date' => '2027-06-30',
-            'status' => AcademicYear::STATUS_ACTIVE,
+            'status' => AcademicYear::STATUS_CURRENT,
         ]);
 
         $response->assertRedirect(route('admin.academic-years.index'))->assertSessionHas('success');
 
         $academicYear->refresh();
-        $this->assertSame(AcademicYear::STATUS_ACTIVE, $academicYear->status);
+        $this->assertSame(AcademicYear::STATUS_CURRENT, $academicYear->status);
         $this->assertSame('2026-07-01', $academicYear->start_date->format('Y-m-d'));
     }
 
@@ -197,5 +197,43 @@ class AcademicYearWebTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors('end_date');
+    }
+
+    public function test_only_one_upcoming_academic_year_may_exist(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027', AcademicYear::STATUS_UPCOMING);
+
+        $response = $this->actingAs($admin)->post(route('admin.academic-years.store'), [
+            'name' => '2027/2028',
+            'status' => AcademicYear::STATUS_UPCOMING,
+        ]);
+
+        $response->assertSessionHasErrors('status');
+    }
+
+    public function test_start_year_is_derived_from_name(): void
+    {
+        $academicYear = $this->createAcademicYear('2026/2027');
+
+        $this->assertSame(2026, $academicYear->start_year);
+    }
+
+    public function test_database_rejects_a_second_running_academic_year(): void
+    {
+        $this->createAcademicYear('2026/2027', AcademicYear::STATUS_CURRENT);
+
+        $this->expectException(\Illuminate\Database\QueryException::class);
+
+        AcademicYear::create(['name' => '2027/2028', 'status' => AcademicYear::STATUS_CURRENT]);
+    }
+
+    public function test_database_rejects_a_second_upcoming_academic_year(): void
+    {
+        $this->createAcademicYear('2026/2027', AcademicYear::STATUS_UPCOMING);
+
+        $this->expectException(\Illuminate\Database\QueryException::class);
+
+        AcademicYear::create(['name' => '2027/2028', 'status' => AcademicYear::STATUS_UPCOMING]);
     }
 }

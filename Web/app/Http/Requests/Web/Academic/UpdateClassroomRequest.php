@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests\Web\Academic;
 
-use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Rules\EligibleHomeroomTeacher;
 use App\Rules\HomeroomTeacherAvailable;
@@ -20,20 +19,18 @@ class UpdateClassroomRequest extends FormRequest
     {
         $classroom = $this->route('classroom');
         $classroom = $classroom instanceof Classroom ? $classroom : null;
-        $academicYear = $this->input('academic_year');
-
-        // Rombel lama boleh mempertahankan tahun ajaran yang sudah diarsipkan,
-        // tetapi penggantian ke tahun ajaran lain wajib memakai tahun ajaran valid.
-        $keepsCurrentYear = $classroom !== null && $academicYear === $classroom->academic_year;
+        $academicYearId = $classroom?->academic_year_id;
 
         return [
             'name' => [
                 'required',
                 'string',
                 'max:50',
-                // Nama rombel unik per tahun ajaran.
+                // Nama rombel unik per tahun ajaran, hanya antar rombel aktif.
                 Rule::unique('classrooms', 'name')
-                    ->where(fn ($query) => $query->where('academic_year', $academicYear))
+                    ->where(fn ($query) => $query
+                        ->where('academic_year_id', $academicYearId)
+                        ->whereNull('deleted_at'))
                     ->ignore($classroom?->id),
             ],
             'level' => ['required', Rule::in(Classroom::LEVELS)],
@@ -52,23 +49,17 @@ class UpdateClassroomRequest extends FormRequest
                     ->where(fn ($query) => $query
                         ->where('level', $this->input('level'))
                         ->where('major', $this->input('major'))
-                        ->where('academic_year', $academicYear))
+                        ->where('academic_year_id', $academicYearId)
+                        ->whereNull('deleted_at'))
                     ->ignore($classroom?->id),
             ],
-            'academic_year' => array_values(array_filter([
-                'required',
-                'string',
-                'max:20',
-                // Hanya tahun ajaran aktif atau yang akan datang yang boleh dipakai.
-                $keepsCurrentYear
-                    ? null
-                    : Rule::exists('academic_years', 'name')->whereIn('status', AcademicYear::SELECTABLE_STATUSES),
-            ])),
+            // Tahun ajaran rombel tidak boleh diubah setelah dibuat.
+            'academic_year_id' => ['required', 'integer', Rule::in([$academicYearId])],
             'homeroom_teacher_id' => [
                 'nullable',
                 'exists:users,id',
                 new EligibleHomeroomTeacher,
-                new HomeroomTeacherAvailable($academicYear, $classroom?->id),
+                new HomeroomTeacherAvailable($academicYearId, $classroom?->id),
             ],
             'is_active' => ['nullable', 'boolean'],
         ];
@@ -85,10 +76,9 @@ class UpdateClassroomRequest extends FormRequest
             'major.in' => 'Jurusan yang dipilih tidak valid.',
             'section.required' => 'Nomor rombel wajib diisi.',
             'section.unique' => 'Nomor sesi ini sudah dipakai pada tingkat, jurusan, dan tahun ajaran yang sama.',
-            'academic_year.required' => 'Tahun ajaran wajib diisi.',
-            'academic_year.exists' => 'Tahun ajaran tidak valid. Hanya tahun ajaran aktif atau yang akan datang yang dapat dipilih.',
+            'academic_year_id.required' => 'Tahun ajaran wajib diisi.',
+            'academic_year_id.in' => 'Tahun ajaran rombel tidak dapat diubah setelah dibuat.',
             'homeroom_teacher_id.exists' => 'Wali kelas yang dipilih tidak valid.',
         ];
     }
 }
-

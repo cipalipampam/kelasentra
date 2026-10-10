@@ -27,6 +27,9 @@
 
     {{-- Modal Tambah Rombel --}}
     @include('admin.classrooms.components.create-modal')
+
+    {{-- Modal Duplikasi Rombel Antar Tahun Ajaran --}}
+    @include('admin.classrooms.components.duplicate-modal')
 @endpush
 
 @push('scripts')

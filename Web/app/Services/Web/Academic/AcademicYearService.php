@@ -6,6 +6,7 @@ use App\Models\AcademicYear;
 use App\Models\Classroom;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class AcademicYearService
 {
@@ -21,32 +22,33 @@ class AcademicYearService
             $query->where('status', $filters['status']);
         }
 
-        return $query->orderByDesc('name')->paginate($perPage)->withQueryString();
+        return $query->orderByDesc('start_year')->paginate($perPage)->withQueryString();
     }
 
     public function create(array $data): AcademicYear
     {
         return DB::transaction(function () use ($data) {
-            $academicYear = AcademicYear::create($this->normalize($data));
+            $this->guardSingleUpcoming($data['status']);
 
-            if ($academicYear->isActive()) {
-                $this->archiveOtherActiveYears($academicYear->getKey());
+            // Periode berjalan lama ditutup lebih dulu agar indeks unik tidak menolak.
+            if ($data['status'] === AcademicYear::STATUS_CURRENT) {
+                $this->closeOtherCurrentYears();
             }
 
-            return $academicYear;
+            return AcademicYear::create($this->normalize($data));
         });
     }
 
     public function update(AcademicYear $academicYear, array $data): bool
     {
         return DB::transaction(function () use ($academicYear, $data) {
-            $updated = $academicYear->update($this->normalize($data));
+            $this->guardSingleUpcoming($data['status'], $academicYear->getKey());
 
-            if ($academicYear->isActive()) {
-                $this->archiveOtherActiveYears($academicYear->getKey());
+            if ($data['status'] === AcademicYear::STATUS_CURRENT) {
+                $this->closeOtherCurrentYears($academicYear->getKey());
             }
 
-            return (bool) $updated;
+            return (bool) $academicYear->update($this->normalize($data));
         });
     }
 
@@ -55,7 +57,7 @@ class AcademicYearService
      */
     public function delete(AcademicYear $academicYear): bool
     {
-        if (Classroom::query()->where('academic_year', $academicYear->name)->exists()) {
+        if (Classroom::query()->where('academic_year_id', $academicYear->getKey())->exists()) {
             return false;
         }
 
@@ -63,17 +65,15 @@ class AcademicYearService
     }
 
     /**
-     * Menjadikan satu tahun ajaran sebagai tahun ajaran berjalan.
-     * Tahun ajaran aktif sebelumnya otomatis diarsipkan.
+     * Menjadikan satu tahun ajaran sebagai periode berjalan.
+     * Periode berjalan sebelumnya otomatis ditutup, bukan dihapus.
      */
-    public function setActive(AcademicYear $academicYear): bool
+    public function setCurrent(AcademicYear $academicYear): bool
     {
         return DB::transaction(function () use ($academicYear) {
-            $updated = $academicYear->update(['status' => AcademicYear::STATUS_ACTIVE]);
+            $this->closeOtherCurrentYears($academicYear->getKey());
 
-            $this->archiveOtherActiveYears($academicYear->getKey());
-
-            return (bool) $updated;
+            return (bool) $academicYear->update(['status' => AcademicYear::STATUS_CURRENT]);
         });
     }
 
@@ -84,9 +84,9 @@ class AcademicYearService
     {
         return [
             'total' => AcademicYear::query()->count(),
-            'active' => AcademicYear::query()->where('status', AcademicYear::STATUS_ACTIVE)->count(),
+            'current' => AcademicYear::query()->where('status', AcademicYear::STATUS_CURRENT)->count(),
             'upcoming' => AcademicYear::query()->where('status', AcademicYear::STATUS_UPCOMING)->count(),
-            'archived' => AcademicYear::query()->where('status', AcademicYear::STATUS_ARCHIVED)->count(),
+            'closed' => AcademicYear::query()->where('status', AcademicYear::STATUS_CLOSED)->count(),
         ];
     }
 
@@ -104,13 +104,35 @@ class AcademicYearService
     }
 
     /**
-     * Hanya satu tahun ajaran yang boleh berstatus aktif.
+     * Maksimal satu periode berikutnya. Periode berjalan tidak dibatasi di sini
+     * karena periode berjalan sebelumnya otomatis ditutup.
      */
-    private function archiveOtherActiveYears(int $exceptId): void
+    private function guardSingleUpcoming(string $status, ?int $exceptId = null): void
+    {
+        if ($status !== AcademicYear::STATUS_UPCOMING) {
+            return;
+        }
+
+        $exists = AcademicYear::query()
+            ->where('status', AcademicYear::STATUS_UPCOMING)
+            ->when($exceptId !== null, fn ($query) => $query->whereKeyNot($exceptId))
+            ->exists();
+
+        if ($exists) {
+            throw ValidationException::withMessages([
+                'status' => 'Sudah ada tahun ajaran yang akan datang. Selesaikan atau ubah periode tersebut terlebih dahulu.',
+            ]);
+        }
+    }
+
+    /**
+     * Periode berjalan sebelumnya ditutup agar riwayatnya tetap tersimpan.
+     */
+    private function closeOtherCurrentYears(?int $exceptId = null): void
     {
         AcademicYear::query()
-            ->where('status', AcademicYear::STATUS_ACTIVE)
-            ->whereKeyNot($exceptId)
-            ->update(['status' => AcademicYear::STATUS_ARCHIVED]);
+            ->where('status', AcademicYear::STATUS_CURRENT)
+            ->when($exceptId !== null, fn ($query) => $query->whereKeyNot($exceptId))
+            ->update(['status' => AcademicYear::STATUS_CLOSED]);
     }
 }

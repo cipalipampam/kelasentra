@@ -23,9 +23,11 @@ class StoreClassroomRequest extends FormRequest
                 'required',
                 'string',
                 'max:50',
-                // Nama rombel unik per tahun ajaran.
+                // Nama rombel unik per tahun ajaran, hanya antar rombel aktif.
                 Rule::unique('classrooms', 'name')
-                    ->where(fn ($query) => $query->where('academic_year', $this->input('academic_year'))),
+                    ->where(fn ($query) => $query
+                        ->where('academic_year_id', $this->input('academic_year_id'))
+                        ->whereNull('deleted_at')),
             ],
             'level' => ['required', Rule::in(Classroom::LEVELS)],
             'major' => [
@@ -43,21 +45,20 @@ class StoreClassroomRequest extends FormRequest
                     ->where(fn ($query) => $query
                         ->where('level', $this->input('level'))
                         ->where('major', $this->input('major'))
-                        ->where('academic_year', $this->input('academic_year'))),
+                        ->where('academic_year_id', $this->input('academic_year_id'))
+                        ->whereNull('deleted_at')),
             ],
-            'academic_year' => [
+            'academic_year_id' => [
                 'required',
-                'string',
-                'max:20',
-                // Hanya tahun ajaran aktif atau yang akan datang yang boleh dipakai.
-                Rule::exists('academic_years', 'name')
-                    ->whereIn('status', AcademicYear::SELECTABLE_STATUSES),
+                'integer',
+                // Hanya tahun ajaran yang belum selesai yang boleh dipakai.
+                Rule::exists('academic_years', 'id')->whereIn('status', AcademicYear::OPERABLE_STATUSES),
             ],
             'homeroom_teacher_id' => [
                 'nullable',
                 'exists:users,id',
                 new EligibleHomeroomTeacher,
-                new HomeroomTeacherAvailable($this->input('academic_year')),
+                new HomeroomTeacherAvailable($this->integer('academic_year_id') ?: null),
             ],
             'is_active' => ['nullable', 'boolean'],
         ];
@@ -74,10 +75,9 @@ class StoreClassroomRequest extends FormRequest
             'major.in' => 'Jurusan yang dipilih tidak valid.',
             'section.required' => 'Nomor rombel wajib diisi.',
             'section.unique' => 'Nomor sesi ini sudah dipakai pada tingkat, jurusan, dan tahun ajaran yang sama.',
-            'academic_year.required' => 'Tahun ajaran wajib diisi.',
-            'academic_year.exists' => 'Tahun ajaran tidak valid. Hanya tahun ajaran aktif atau yang akan datang yang dapat dipilih.',
+            'academic_year_id.required' => 'Tahun ajaran wajib diisi.',
+            'academic_year_id.exists' => 'Tahun ajaran tidak valid. Hanya tahun ajaran yang belum selesai yang dapat dipilih.',
             'homeroom_teacher_id.exists' => 'Wali kelas yang dipilih tidak valid.',
         ];
     }
 }
-

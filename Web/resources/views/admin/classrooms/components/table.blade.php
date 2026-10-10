@@ -1,4 +1,10 @@
 {{-- Tabel Data Rombongan Belajar --}}
+@if($showHistory)
+<div class="alert alert-secondary border d-flex align-items-center gap-2 py-2 px-3 mb-3" style="font-size: 0.82rem;">
+    <i class="bi bi-clock-history text-secondary"></i>
+    <span>Menampilkan semua rombel termasuk riwayat dari tahun ajaran yang sudah selesai.</span>
+</div>
+@endif
 <div class="js-live-results">
     <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
         <div class="table-responsive">
@@ -33,7 +39,7 @@
                         </td>
                         <td class="text-dark small">{{ $classroom->major }}</td>
                         <td class="text-dark small text-center">{{ $classroom->section }}</td>
-                        <td class="text-dark small">{{ $classroom->academic_year }}</td>
+                        <td class="text-dark small">{{ $classroom->academicYear?->name }}</td>
                         <td>
                             @if($classroom->homeroomTeacher)
                                 <div class="d-flex align-items-center gap-2">
