@@ -8,109 +8,65 @@ use App\Models\User;
 use Illuminate\Database\Seeder;
 
 /**
- * Seed rombel untuk seluruh tahun ajaran yang terdaftar.
+ * Rombel untuk tiga tahun ajaran terakhir: dua angkatan paralel di setiap
+ * tingkat, dengan wali kelas yang berbeda tiap tahun ajaran.
  *
- * Satu tahun ajaran berisi 3 tingkat (X, XI, XII) x 3 jurusan
- * (MIPA, IPS, BAHASA) = 9 rombel. Wali kelas dirotasi per tahun ajaran
- * sehingga satu guru hanya memegang satu rombel pada tahun ajaran yang sama.
- *
- * Rombel milik tahun ajaran yang sudah diarsipkan ditandai nonaktif.
+ * `is_active` dibiarkan menyala karena saat seeder berjalan rombel-rombel ini
+ * masih dipakai proses kenaikan kelas. PromotionHistorySeeder mematikannya
+ * untuk tahun ajaran yang sudah selesai.
  */
 class ClassroomSeeder extends Seeder
 {
-    public const LEVELS = ['10', '11', '12'];
+    /** @var list<string> */
+    private const YEARS = ['2024/2025', '2025/2026', '2026/2027'];
 
-    public const LEVEL_ROMAN = ['10' => 'X', '11' => 'XI', '12' => 'XII'];
-
-    public const MAJORS = ['MIPA', 'IPS', 'BAHASA'];
+    /** @var list<array{name: string, level: string, major: ?string, section: string}> */
+    private const CLASSROOMS = [
+        ['name' => 'X MIPA 1', 'level' => Classroom::LEVEL_X, 'major' => null, 'section' => '1'],
+        ['name' => 'X MIPA 2', 'level' => Classroom::LEVEL_X, 'major' => null, 'section' => '2'],
+        ['name' => 'XI MIPA 1', 'level' => Classroom::LEVEL_XI, 'major' => 'MIPA', 'section' => '1'],
+        ['name' => 'XI MIPA 2', 'level' => Classroom::LEVEL_XI, 'major' => 'MIPA', 'section' => '2'],
+        ['name' => 'XII MIPA 1', 'level' => Classroom::LEVEL_XII, 'major' => 'MIPA', 'section' => '1'],
+        ['name' => 'XII MIPA 2', 'level' => Classroom::LEVEL_XII, 'major' => 'MIPA', 'section' => '2'],
+    ];
 
     public function run(): void
     {
-        $academicYears = AcademicYear::orderBy('name')->get();
+        $years = AcademicYear::query()->whereIn('name', self::YEARS)->get()->keyBy('name');
+        $homeroomCandidates = User::query()
+            ->role('guru')
+            ->eligibleHomeroomTeacher()
+            ->orderBy('id')
+            ->pluck('id')
+            ->all();
 
-        if ($academicYears->isEmpty()) {
-            $this->command->warn('⚠️ Belum ada tahun ajaran. Jalankan AcademicYearSeeder lebih dulu.');
-
-            return;
-        }
-
-        $rombelPerYear = count(self::LEVELS) * count(self::MAJORS);
-
-        // Hanya guru berstatus aktif yang boleh menjadi wali kelas.
-        $teachers = User::query()->eligibleHomeroomTeacher()->orderBy('name')->get();
-
-        if ($teachers->count() < $rombelPerYear) {
-            $this->command->warn("⚠️ Guru aktif tersedia {$teachers->count()}, dibutuhkan minimal {$rombelPerYear}. Jalankan EmployeeSeeder lebih dulu.");
+        if ($homeroomCandidates === []) {
+            $this->command?->warn('Tidak ada guru aktif; rombel dibuat tanpa wali kelas.');
 
             return;
         }
 
-        $this->pruneStaleClassrooms($academicYears->pluck('name')->all());
+        foreach (self::YEARS as $yearIndex => $yearName) {
+            $year = $years->get($yearName);
 
-        $total = 0;
-        $teacherCount = $teachers->count();
+            if ($year === null) {
+                continue;
+            }
 
-        foreach ($academicYears as $yearIndex => $academicYear) {
-            $slot = 0;
-
-            foreach (self::LEVELS as $level) {
-                foreach (self::MAJORS as $major) {
-                    Classroom::updateOrCreate(
-                        [
-                            'name' => self::LEVEL_ROMAN[$level].'-'.$major.' 1',
-                            'academic_year' => $academicYear->name,
-                        ],
-                        [
-                            'level' => $level,
-                            'major' => $major,
-                            'section' => '1',
-                            'homeroom_teacher_id' => $teachers[($slot + $yearIndex) % $teacherCount]->id,
-                            'is_active' => $academicYear->status !== AcademicYear::STATUS_ARCHIVED,
-                        ]
-                    );
-
-                    $slot++;
-                    $total++;
-                }
+            foreach (self::CLASSROOMS as $classroomIndex => $data) {
+                Classroom::updateOrCreate(
+                    ['name' => $data['name'], 'academic_year_id' => $year->getKey()],
+                    [
+                        'level' => $data['level'],
+                        'major' => $data['major'],
+                        'section' => $data['section'],
+                        // Rotasi memastikan satu guru hanya menjadi wali kelas
+                        // satu rombel pada tahun ajaran yang sama.
+                        'homeroom_teacher_id' => $homeroomCandidates[($yearIndex * 2 + $classroomIndex) % count($homeroomCandidates)],
+                        'is_active' => true,
+                    ],
+                );
             }
         }
-
-        $this->command->info("✅ {$total} rombel berhasil di-seed ({$academicYears->count()} tahun ajaran × {$rombelPerYear} rombel).");
-    }
-
-    /**
-     * Hapus rombel pada tahun ajaran yang di-seed namun tidak termasuk komposisi standar.
-     *
-     * @param  list<string>  $seededYears
-     */
-    private function pruneStaleClassrooms(array $seededYears): void
-    {
-        $stale = Classroom::query()
-            ->whereIn('academic_year', $seededYears)
-            ->whereNotIn('name', $this->blueprints())
-            ->get();
-
-        foreach ($stale as $classroom) {
-            $this->command->warn("   ↻ Menghapus rombel lama di luar komposisi standar: {$classroom->name} ({$classroom->academic_year})");
-            $classroom->delete();
-        }
-    }
-
-    /**
-     * Nama rombel standar, tanpa memandang tahun ajaran.
-     *
-     * @return list<string>
-     */
-    private function blueprints(): array
-    {
-        $names = [];
-
-        foreach (self::LEVELS as $level) {
-            foreach (self::MAJORS as $major) {
-                $names[] = self::LEVEL_ROMAN[$level].'-'.$major.' 1';
-            }
-        }
-
-        return $names;
     }
 }

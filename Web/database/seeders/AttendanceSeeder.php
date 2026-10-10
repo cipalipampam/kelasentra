@@ -2,125 +2,259 @@
 
 namespace Database\Seeders;
 
+use App\Models\AcademicYear;
 use App\Models\Attendance;
+use App\Models\Employee;
+use App\Models\Student;
+use App\Models\StudentEnrollment;
 use App\Models\User;
-use Carbon\Carbon;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 
 /**
- * Seed riwayat presensi gerbang harian 14 hari ke belakang untuk seluruh
- * siswa, guru, dan staf.
+ * Presensi gerbang harian: siswa, guru, dan tenaga kependidikan.
  *
- * Senin-Sabtu saja (Minggu dilewati). Distribusi acak: 80% hadir,
- * 10% izin, 10% sakit. Penulisan memakai bulk insert agar ribuan rekaman tetap cepat.
+ * Setiap baris menyimpan konteks akademik saat presensi dicatat (tahun ajaran +
+ * rombel), sama seperti yang dilakukan AttendanceContext pada alur aplikasi,
+ * sehingga laporan periode lama tetap benar walau siswa sudah berpindah kelas.
+ *
+ * Sebagian kecil presensi sengaja ditinggal tanpa persetujuan (`is_approved`
+ * null) agar antrean "menunggu persetujuan" di panel admin ada isinya.
  */
 class AttendanceSeeder extends Seeder
 {
-    private const HISTORY_DAYS = 14;
+    private const CURRENT_YEAR_DAYS = 12;
 
-    private const INSERT_CHUNK = 500;
+    private const PREVIOUS_YEAR_DAYS = 3;
+
+    private const CHUNK_SIZE = 200;
+
+    /** Koordinat di dalam radius sekolah (lihat SettingSeeder). */
+    private const SCHOOL_LAT = -6.2;
+
+    private const SCHOOL_LONG = 106.816666;
 
     public function run(): void
     {
-        $users = User::with('roles')->get()->filter(
-            fn (User $user) => $user->hasRole(['siswa', 'guru', 'staff'])
-        );
+        if (Attendance::query()->exists()) {
+            $this->command?->warn('Presensi sudah ada; AttendanceSeeder dilewati.');
 
-        $existingDates = $this->existingDatesByUser();
+            return;
+        }
 
+        $currentYear = AcademicYear::currentYear();
+
+        if ($currentYear === null) {
+            $this->command?->warn('Tahun ajaran berjalan belum ada; AttendanceSeeder dilewati.');
+
+            return;
+        }
+
+        $this->seedCurrentYear($currentYear);
+        $this->seedPreviousYear($currentYear);
+    }
+
+    private function seedCurrentYear(AcademicYear $year): void
+    {
+        $cutoff = DemoData::dataCutoff($year->end_date);
+        $dates = DemoData::schoolDays($cutoff, self::CURRENT_YEAR_DAYS, $year->start_date);
+
+        if ($dates === []) {
+            return;
+        }
+
+        $studentsByClassroom = Student::query()
+            ->with('currentEnrollment')
+            ->where('academic_status', 'active')
+            ->whereHas('currentEnrollment')
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn (Student $student) => $student->currentEnrollment->classroom_id);
+
+        $employees = $this->activeEmployeeUsers();
+        $latest = $dates[0];
         $rows = [];
-        $now = Carbon::now();
 
-        foreach ($users as $user) {
-            $recordedDates = $existingDates->get($user->id, []);
-
-            for ($dayOffset = self::HISTORY_DAYS; $dayOffset >= 1; $dayOffset--) {
-                $date = Carbon::today()->subDays($dayOffset);
-
-                // Skip Minggu
-                if ($date->dayOfWeek === Carbon::SUNDAY) {
-                    continue;
+        foreach ($dates as $dateIndex => $date) {
+            foreach ($studentsByClassroom as $classroomStudents) {
+                foreach ($classroomStudents->values() as $indexInClassroom => $student) {
+                    $rows[] = $this->studentRow(
+                        (int) $student->user_id,
+                        $student->currentEnrollment,
+                        $date,
+                        $this->studentStatus($dateIndex, $indexInClassroom, $date === $latest),
+                    );
                 }
+            }
 
-                // Skip jika sudah ada record di hari ini untuk user ini
-                if (in_array($date->toDateString(), $recordedDates, true)) {
-                    continue;
-                }
-
-                $rows[] = $this->makeRow($user, $date, $now);
+            foreach ($employees->values() as $index => $employee) {
+                $rows[] = $this->employeeRow((int) $employee->getKey(), (int) $year->getKey(), $date, $index);
             }
         }
 
-        foreach (array_chunk($rows, self::INSERT_CHUNK) as $chunk) {
-            Attendance::query()->insert($chunk);
+        $this->insert($rows);
+
+        $this->command?->info(sprintf('✅ Presensi gerbang: %d baris untuk %d hari sekolah terakhir.', count($rows), count($dates)));
+    }
+
+    /**
+     * Sampel presensi tahun ajaran sebelumnya agar filter laporan historis
+     * punya data; konteksnya diambil dari enrollment tahun itu.
+     */
+    private function seedPreviousYear(AcademicYear $currentYear): void
+    {
+        $previousYear = AcademicYear::query()->where('start_year', $currentYear->start_year - 1)->first();
+
+        if ($previousYear === null) {
+            return;
         }
 
-        $this->command->info('✅ '.count($rows).' record presensi gerbang ('.self::HISTORY_DAYS." hari terakhir) berhasil di-seed untuk {$users->count()} pengguna.");
+        $cutoff = DemoData::dataCutoff($previousYear->end_date);
+        $dates = DemoData::schoolDays($cutoff, self::PREVIOUS_YEAR_DAYS, $previousYear->start_date);
+        $enrollments = StudentEnrollment::query()
+            ->with('student')
+            ->where('academic_year_id', $previousYear->getKey())
+            ->orderBy('id')
+            ->get();
+
+        $rows = [];
+
+        foreach ($dates as $dateIndex => $date) {
+            foreach ($enrollments as $index => $enrollment) {
+                $student = $enrollment->student;
+
+                if ($student === null || $student->user_id === null) {
+                    continue;
+                }
+
+                $rows[] = $this->studentRow((int) $student->user_id, $enrollment, $date, $this->regularStatus($dateIndex, $index));
+            }
+        }
+
+        $this->insert($rows);
+
+        $this->command?->info(sprintf('✅ Presensi %s: %d baris (laporan periode lama).', $previousYear->name, count($rows)));
+    }
+
+    /**
+     * @return array{0: string, 1: bool, 2: ?bool}
+     */
+    private function studentStatus(int $dateIndex, int $indexInClassroom, bool $isLatestDay): array
+    {
+        // Hari terakhir: pola tetap agar fitur prefill presensi mapel dan
+        // antrean persetujuan selalu punya contoh.
+        if ($isLatestDay) {
+            return match ($indexInClassroom) {
+                0 => ['sick', false, true],
+                1 => ['permission', false, true],
+                2 => ['absent', false, true],
+                3 => ['permission', false, null],
+                default => $this->regularStatus($dateIndex, $indexInClassroom),
+            };
+        }
+
+        return $this->regularStatus($dateIndex, $indexInClassroom);
+    }
+
+    /**
+     * @return array{0: string, 1: bool, 2: ?bool}
+     */
+    private function regularStatus(int $dateIndex, int $index): array
+    {
+        return match (($dateIndex * 7 + $index) % 20) {
+            0, 1 => ['sick', false, true],
+            2 => ['permission', false, true],
+            3 => ['absent', false, true],
+            4 => ['present', true, null],
+            default => ['present', false, null],
+        };
+    }
+
+    /**
+     * @param  array{0: string, 1: bool, 2: ?bool}  $status
+     * @return array<string, mixed>
+     */
+    private function studentRow(int $userId, StudentEnrollment $enrollment, string $date, array $status): array
+    {
+        [$state, $isLate, $isApproved] = $status;
+        $recordedAt = $date.' 06:'.str_pad((string) ($userId % 60), 2, '0', STR_PAD_LEFT).':00';
+
+        return [
+            'user_id' => $userId,
+            'academic_year_id' => $enrollment->academic_year_id,
+            'classroom_id' => $enrollment->classroom_id,
+            'attendance_date' => $date,
+            'recorded_at' => $recordedAt,
+            'check_out_time' => $state === 'present' && $userId % 3 === 0
+                ? $date.' 15:'.str_pad((string) ($userId % 30), 2, '0', STR_PAD_LEFT).':00'
+                : null,
+            'latitude' => self::SCHOOL_LAT + (($userId % 11) - 5) / 100000,
+            'longitude' => self::SCHOOL_LONG + (($userId % 9) - 4) / 100000,
+            'status' => $state,
+            'is_late' => $isLate,
+            'is_approved' => $isApproved,
+            'notes' => $this->notesFor($state),
+            'proof_image' => null,
+            'created_at' => $recordedAt,
+            'updated_at' => $recordedAt,
+        ];
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function makeRow(User $user, Carbon $date, Carbon $now): array
+    private function employeeRow(int $userId, int $academicYearId, string $date, int $index): array
     {
-        $roll = rand(1, 10); // 1-8 hadir, 9 izin, 10 sakit
+        $recordedAt = $date.' 06:'.str_pad((string) ($userId % 45), 2, '0', STR_PAD_LEFT).':00';
 
-        $base = [
-            'user_id' => $user->id,
-            'is_late' => false,
-            'latitude' => null,
-            'longitude' => null,
-            'check_out_time' => null,
+        return [
+            'user_id' => $userId,
+            // Pegawai tidak punya enrollment: hanya tahun ajaran yang dibekukan.
+            'academic_year_id' => $academicYearId,
+            'classroom_id' => null,
+            'attendance_date' => $date,
+            'recorded_at' => $recordedAt,
+            'check_out_time' => $index % 4 === 0 ? $date.' 15:'.str_pad((string) ($userId % 40), 2, '0', STR_PAD_LEFT).':00' : null,
+            'latitude' => self::SCHOOL_LAT + (($userId % 7) - 3) / 100000,
+            'longitude' => self::SCHOOL_LONG + (($userId % 6) - 3) / 100000,
+            'status' => 'present',
+            'is_late' => $index % 9 === 0,
+            'is_approved' => null,
             'notes' => null,
-            'created_at' => $now,
-            'updated_at' => $now,
+            'proof_image' => null,
+            'created_at' => $recordedAt,
+            'updated_at' => $recordedAt,
         ];
+    }
 
-        if ($roll <= 8) {
-            // HADIR — jam masuk acak antara 06:30-07:20
-            $checkIn = $date->copy()->setHour(6)->setMinute(30)->addMinutes(rand(0, 50));
-
-            return array_merge($base, [
-                'status' => 'present',
-                'is_late' => $checkIn->greaterThan($date->copy()->setHour(7)->setMinute(0)),
-                'is_approved' => true,
-                'latitude' => -6.200000 + (rand(-10, 10) / 10000),
-                'longitude' => 106.816666 + (rand(-10, 10) / 10000),
-                'recorded_at' => $checkIn,
-                // Jam pulang acak antara 15:00-16:00
-                'check_out_time' => $date->copy()->setHour(15)->addMinutes(rand(0, 60)),
-            ]);
-        }
-
-        if ($roll === 9) {
-            return array_merge($base, [
-                'status' => 'permission',
-                'is_approved' => rand(0, 1) === 1 ? true : null,
-                'notes' => 'Keperluan keluarga.',
-                'recorded_at' => $date->copy()->setHour(7)->setMinute(0),
-            ]);
-        }
-
-        return array_merge($base, [
-            'status' => 'sick',
-            'is_approved' => rand(0, 1) === 1 ? true : null,
-            'notes' => 'Demam dan flu.',
-            'recorded_at' => $date->copy()->setHour(7)->setMinute(0),
-        ]);
+    private function notesFor(string $state): ?string
+    {
+        return match ($state) {
+            'sick' => 'Sakit dengan surat keterangan dokter.',
+            'permission' => 'Izin keperluan keluarga.',
+            'absent' => 'Tanpa keterangan.',
+            default => null,
+        };
     }
 
     /**
-     * Tanggal presensi yang sudah tercatat per pengguna, diambil sekali
-     * agar tidak perlu query berulang per hari.
-     *
-     * @return \Illuminate\Support\Collection<int, list<string>>
+     * @return Collection<int, User>
      */
-    private function existingDatesByUser()
+    private function activeEmployeeUsers(): Collection
     {
-        return Attendance::query()
-            ->where('recorded_at', '>=', Carbon::today()->subDays(self::HISTORY_DAYS)->startOfDay())
-            ->get(['user_id', 'recorded_at'])
-            ->groupBy('user_id')
-            ->map(fn ($rows) => $rows->map(fn ($row) => Carbon::parse($row->recorded_at)->toDateString())->all());
+        return User::query()
+            ->whereHas('employee', fn ($query) => $query->where('employment_status', Employee::STATUS_ACTIVE))
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function insert(array $rows): void
+    {
+        foreach (array_chunk($rows, self::CHUNK_SIZE) as $chunk) {
+            Attendance::insert($chunk);
+        }
     }
 }
