@@ -7,17 +7,17 @@ use App\Models\Attendance;
 use App\Models\Schedule;
 use App\Models\ScheduleAttendance;
 use App\Models\Student;
+use App\Models\StudentEnrollment;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
-
 use Illuminate\Validation\ValidationException;
 
 class ClassAttendanceService
 {
     public function isAssignedTeacher(User $user, Schedule $schedule): bool
     {
-        return $schedule->teacher_id === $user->id || $user->hasRole('admin');
+        return (int) $schedule->teacher?->getKey() === (int) $user->getKey() || $user->hasRole('admin');
     }
 
     public function getRosterData(Schedule $schedule, ?string $rawDate): array
@@ -39,7 +39,7 @@ class ClassAttendanceService
     public function roster(Schedule $schedule, string $date): array
     {
         $students = Student::query()
-            ->where('classroom_id', $schedule->classroom_id)
+            ->whereHas('currentEnrollment', fn ($enrollment) => $enrollment->where('classroom_id', $schedule->classroom_id))
             ->where('academic_status', 'active')
             ->with([
                 'user:id,name',
@@ -77,7 +77,7 @@ class ClassAttendanceService
     {
         $studentIds = collect($attendances)->pluck('student_id');
         $eligibleCount = Student::query()
-            ->where('classroom_id', $schedule->classroom_id)
+            ->whereHas('currentEnrollment', fn ($enrollment) => $enrollment->where('classroom_id', $schedule->classroom_id))
             ->where('academic_status', 'active')
             ->whereIn('id', $studentIds)
             ->count();
@@ -101,9 +101,18 @@ class ClassAttendanceService
 
         $date = $this->date($rawDate);
         $now = now();
+
+        // Enrollment berlaku dibekukan pada setiap baris agar absensi tetap
+        // menunjuk rombel yang benar walau siswa kemudian berpindah kelas.
+        $enrollments = StudentEnrollment::query()
+            ->whereIn('student_id', collect($attendances)->pluck('student_id'))
+            ->whereNull('ended_at')
+            ->pluck('id', 'student_id');
+
         $records = collect($attendances)->map(fn (array $attendance) => [
             'schedule_id' => $schedule->id,
             'student_id' => $attendance['student_id'],
+            'student_enrollment_id' => $enrollments[$attendance['student_id']] ?? null,
             'teacher_id' => $teacher->id,
             'attendance_date' => $date,
             'status' => $attendance['status'],
@@ -117,7 +126,7 @@ class ClassAttendanceService
             ScheduleAttendance::upsert(
                 $records,
                 ['schedule_id', 'student_id', 'attendance_date'],
-                ['teacher_id', 'status', 'notes', 'recorded_at', 'updated_at'],
+                ['student_enrollment_id', 'teacher_id', 'status', 'notes', 'recorded_at', 'updated_at'],
             );
 
             return $this->createAbsenceNotifications($schedule, $date);
@@ -133,7 +142,7 @@ class ClassAttendanceService
 
     public function scheduleData(Schedule $schedule): array
     {
-        $schedule->loadMissing(['classroom:id,name', 'subject:id,code,name']);
+        $schedule->loadMissing(['assignment.classroom:id,name', 'assignment.subject:id,code,name']);
 
         return [
             'id' => $schedule->id,
@@ -156,7 +165,7 @@ class ClassAttendanceService
             ->with('student.user:id,name')
             ->get();
 
-        $schedule->loadMissing(['classroom:id,name', 'subject:id,name']);
+        $schedule->loadMissing(['assignment.classroom:id,name', 'assignment.subject:id,name']);
         $created = 0;
 
         foreach ($absences as $absence) {

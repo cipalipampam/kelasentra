@@ -6,8 +6,10 @@ use App\Events\DirectoryChanged;
 use App\Events\SessionInvalidated;
 use App\Models\Employee;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class EmployeeService
 {
@@ -29,6 +31,7 @@ class EmployeeService
         $user->employee()->create([
             'nip' => $data['nip'] ?? null,
             'position' => $data['position'] ?? null,
+            'is_teacher' => $data['role'] === 'guru',
             'employment_status' => $data['employment_status'] ?? Employee::STATUS_ACTIVE,
             'gender' => $data['gender'] ?? null,
             'place_of_birth' => $data['place_of_birth'] ?? null,
@@ -65,6 +68,14 @@ class EmployeeService
             $user->update(['name' => $data['name'], 'email' => $data['email']]);
         }
 
+        // Guru yang masih memegang penugasan mengajar tidak boleh langsung
+        // diubah menjadi staff; penugasannya harus dipindahkan atau ditutup dulu.
+        if ($data['role'] !== 'guru' && $user->teachingAssignments()->exists()) {
+            throw ValidationException::withMessages([
+                'role' => 'Guru ini masih memiliki penugasan mengajar. Pindahkan atau tutup penugasannya terlebih dahulu.',
+            ]);
+        }
+
         $user->syncRoles([$data['role']]);
 
         $currentPic = $user->employee ? $user->employee->profile_picture : null;
@@ -82,6 +93,7 @@ class EmployeeService
             [
                 'nip' => $data['nip'] ?? null,
                 'position' => $data['position'] ?? null,
+                'is_teacher' => $data['role'] === 'guru',
                 'employment_status' => $data['employment_status']
                     ?? $user->employee?->employment_status
                     ?? Employee::STATUS_ACTIVE,
@@ -120,8 +132,13 @@ class EmployeeService
         if ($currentPic) {
             Storage::disk('public')->delete($currentPic);
         }
-        $user->tokens()->delete();
-        $user->delete();
+        DB::transaction(function () use ($user) {
+            // Riwayat mengajar tetap tersimpan: baris dinonaktifkan, bukan dihapus permanen.
+            $user->employee?->delete();
+            $user->tokens()->delete();
+            $user->delete();
+        });
+
         event(new DirectoryChanged($userId, 'employee', 'deleted'));
         event(new SessionInvalidated($userId, 'account_deleted'));
     }

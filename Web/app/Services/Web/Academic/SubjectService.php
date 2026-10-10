@@ -9,7 +9,7 @@ class SubjectService
 {
     public function getPaginatedSubjects(array $filters = [], int $perPage = 10): LengthAwarePaginator
     {
-        $query = Subject::withCount('schedules');
+        $query = Subject::withCount('assignments');
 
         if (! empty($filters['search'])) {
             $search = $filters['search'];
@@ -38,7 +38,7 @@ class SubjectService
 
     public function deleteSubject(Subject $subject): bool
     {
-        if ($subject->schedules()->count() > 0) {
+        if ($subject->assignments()->count() > 0) {
             return false;
         }
 

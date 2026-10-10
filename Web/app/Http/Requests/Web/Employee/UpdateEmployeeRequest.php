@@ -22,10 +22,11 @@ class UpdateEmployeeRequest extends FormRequest
 
         return [
             'name' => 'required|string|max:255',
-            'email' => ['required', 'email', Rule::unique('users')->ignore($user->id)],
+            // Kunci bisnis milik baris non-aktif tidak menghalangi pemakaian ulang.
+            'email' => ['required', 'email', Rule::unique('users')->ignore($user->id)->whereNull('deleted_at')],
             'password' => 'nullable|min:6',
             'role' => 'required|in:guru,staff',
-            'nip' => ['nullable', Rule::unique('employees', 'nip')->ignore($employeeId)],
+            'nip' => ['nullable', Rule::unique('employees', 'nip')->ignore($employeeId)->whereNull('deleted_at')],
             'position' => 'nullable|string|max:100',
             'employment_status' => ['nullable', Rule::in(Employee::STATUSES)],
             'gender' => 'nullable|in:male,female',

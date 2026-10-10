@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -16,7 +17,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, HasRoles, Notifiable;
+    use HasApiTokens, HasFactory, HasRoles, Notifiable, SoftDeletes;
 
     /**
      * Tell Spatie Permission to always resolve roles/permissions against
@@ -75,9 +76,9 @@ class User extends Authenticatable
         return $this->hasMany(Attendance::class);
     }
 
-    public function schedules(): HasMany
+    public function teachingAssignments(): HasMany
     {
-        return $this->hasMany(Schedule::class, 'teacher_id');
+        return $this->hasMany(TeachingAssignment::class, 'teacher_id');
     }
 
     public function appNotifications(): HasMany

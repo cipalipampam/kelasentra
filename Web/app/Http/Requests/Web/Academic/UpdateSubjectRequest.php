@@ -21,7 +21,7 @@ class UpdateSubjectRequest extends FormRequest
                 'required',
                 'string',
                 'max:20',
-                Rule::unique('subjects', 'code')->ignore($subjectId),
+                Rule::unique('subjects', 'code')->ignore($subjectId)->whereNull('deleted_at'),
             ],
             'name' => ['required', 'string', 'max:100'],
             'cluster' => ['required', 'string', 'in:mipa,bahasa,ips,umum'],
@@ -40,4 +40,3 @@ class UpdateSubjectRequest extends FormRequest
         ];
     }
 }
-

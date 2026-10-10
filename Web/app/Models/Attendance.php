@@ -12,6 +12,8 @@ class Attendance extends Model
 
     protected $fillable = [
         'user_id',
+        'academic_year_id',
+        'classroom_id',
         'recorded_at',
         'latitude',
         'longitude',
@@ -31,9 +33,20 @@ class Attendance extends Model
         'is_late' => 'boolean',
     ];
 
+    /** Riwayat presensi tetap harus menampilkan nama pemiliknya walau akunnya sudah dinonaktifkan. */
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class)->withTrashed();
+    }
+
+    public function academicYear()
+    {
+        return $this->belongsTo(AcademicYear::class);
+    }
+
+    public function classroom()
+    {
+        return $this->belongsTo(Classroom::class)->withTrashed();
     }
 
     protected static function booted(): void

@@ -6,6 +6,7 @@ use App\Events\AttendanceLogged;
 use App\Events\DashboardStatsUpdated;
 use App\Models\Attendance;
 use App\Models\User;
+use App\Services\Shared\Attendance\AttendanceContext;
 use App\Services\Shared\Settings\SettingCache;
 use App\Services\Shared\Storage\AttendanceProofStorage;
 use Carbon\Carbon;
@@ -92,7 +93,7 @@ class AttendanceService
         }
 
         $attendance = $this->persistAttendance(function () use ($user, $data, $isLate, $proofPath) {
-            $record = Attendance::create([
+            $record = Attendance::create(array_merge(AttendanceContext::forUser($user), [
                 'user_id' => $user->id,
                 'status' => 'present',
                 'is_late' => $isLate,
@@ -102,7 +103,7 @@ class AttendanceService
                 'notes' => $data['notes'] ?? null,
                 'proof_image' => $proofPath,
                 'recorded_at' => Carbon::now(),
-            ]);
+            ]));
 
             event(new AttendanceLogged($record, 'check_in'));
             event(new DashboardStatsUpdated);
@@ -136,13 +137,13 @@ class AttendanceService
         }
 
         $attendance = $this->persistAttendance(function () use ($user, $data, $proofPath) {
-            $record = Attendance::create([
+            $record = Attendance::create(array_merge(AttendanceContext::forUser($user), [
                 'user_id' => $user->id,
                 'status' => $data['status'],
                 'notes' => $data['notes'] ?? null,
                 'proof_image' => $proofPath,
                 'recorded_at' => Carbon::now(),
-            ]);
+            ]));
 
             event(new AttendanceLogged($record, 'permission_submitted'));
             event(new DashboardStatsUpdated);
