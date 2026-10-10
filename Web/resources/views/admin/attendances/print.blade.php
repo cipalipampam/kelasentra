@@ -125,7 +125,7 @@
                 <strong>Peran:</strong> {{ ucfirst($role) }}<br>
             @endif
             @if(isset($classroom) && $classroom)
-                <strong>Rombel:</strong> {{ $classroom->name }} (TA {{ $classroom->academic_year }})<br>
+                <strong>Rombel:</strong> {{ $classroom->name }} (TA {{ $classroom->academicYear?->name }})<br>
             @endif
         </div>
         <div class="text-end">

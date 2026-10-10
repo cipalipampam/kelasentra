@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Web\Academic;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreSubjectRequest extends FormRequest
 {
@@ -14,7 +15,8 @@ class StoreSubjectRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code' => ['required', 'string', 'max:20', 'unique:subjects,code'],
+            // Kode milik mata pelajaran non-aktif tidak menghalangi pemakaian ulang.
+            'code' => ['required', 'string', 'max:20', Rule::unique('subjects', 'code')->whereNull('deleted_at')],
             'name' => ['required', 'string', 'max:100'],
             'cluster' => ['required', 'string', 'in:mipa,bahasa,ips,umum'],
             'color_code' => ['required', 'string', 'max:10'],
@@ -32,4 +34,3 @@ class StoreSubjectRequest extends FormRequest
         ];
     }
 }
-

@@ -6,6 +6,8 @@ use App\Events\AdminAttendanceChanged;
 use App\Events\AttendanceApproved;
 use App\Events\DashboardStatsUpdated;
 use App\Models\Attendance;
+use App\Models\User;
+use App\Services\Shared\Attendance\AttendanceContext;
 use App\Services\Shared\Storage\AttendanceProofStorage;
 
 class AdminAttendanceService
@@ -19,7 +21,9 @@ class AdminAttendanceService
         $data['proof_image'] = isset($data['proof_image'])
             ? $this->proofStorage->store($data['proof_image'])
             : null;
-        $attendance = Attendance::create($data);
+        $context = AttendanceContext::forUser(User::find($data['user_id'] ?? null));
+
+        $attendance = Attendance::create(array_merge($context, $data));
         $this->notify($attendance, 'created');
 
         return $attendance;
@@ -27,6 +31,10 @@ class AdminAttendanceService
 
     public function update(Attendance $attendance, array $data): Attendance
     {
+        if (isset($data['user_id']) && (int) $data['user_id'] !== $attendance->user_id) {
+            $data = array_merge(AttendanceContext::forUser(User::find($data['user_id'])), $data);
+        }
+
         if (isset($data['proof_image'])) {
             $newProof = $this->proofStorage->store($data['proof_image']);
             $this->proofStorage->delete($attendance->proof_image);

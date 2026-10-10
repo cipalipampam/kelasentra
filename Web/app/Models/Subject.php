@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Subject extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'code',
@@ -22,9 +23,9 @@ class Subject extends Model
         'is_active' => 'boolean',
     ];
 
-    public function schedules(): HasMany
+    public function assignments(): HasMany
     {
-        return $this->hasMany(Schedule::class);
+        return $this->hasMany(TeachingAssignment::class);
     }
 
     public function teachers()

@@ -95,6 +95,7 @@ class SubjectWebTest extends TestCase
 
         $response->assertRedirect(route('admin.subjects.index'));
         $response->assertSessionHas('success');
-        $this->assertDatabaseMissing('subjects', ['id' => $subject->id]);
+        // Riwayat mata pelajaran tetap tersimpan: nonaktif, bukan hilang.
+        $this->assertSoftDeleted('subjects', ['id' => $subject->id]);
     }
 }

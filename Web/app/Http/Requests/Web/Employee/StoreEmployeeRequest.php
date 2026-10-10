@@ -17,10 +17,11 @@ class StoreEmployeeRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
+            // Kunci bisnis yang dipakai baris non-aktif boleh dipakai ulang.
+            'email' => ['required', 'email', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'password' => 'required|min:6',
             'role' => 'required|in:guru,staff',
-            'nip' => 'nullable|unique:employees,nip',
+            'nip' => ['nullable', Rule::unique('employees', 'nip')->whereNull('deleted_at')],
             'position' => 'nullable|string|max:100',
             'employment_status' => ['nullable', Rule::in(Employee::STATUSES)],
             'gender' => 'nullable|in:male,female',

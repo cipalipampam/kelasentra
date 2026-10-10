@@ -10,9 +10,12 @@ return new class extends Migration
     {
         Schema::create('schedule_attendances', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('schedule_id')->constrained('schedules')->cascadeOnDelete();
-            $table->foreignId('student_id')->constrained('students')->cascadeOnDelete();
-            $table->foreignId('teacher_id')->constrained('users')->cascadeOnDelete();
+            // Riwayat absensi mapel tidak boleh hilang karena penghapusan entitas.
+            $table->foreignId('schedule_id')->constrained('schedules')->restrictOnDelete();
+            $table->foreignId('student_id')->constrained('students')->restrictOnDelete();
+            $table->foreignId('teacher_id')->constrained('users')->restrictOnDelete();
+            // Enrollment yang berlaku saat absensi dicatat, sumber validasi konteks.
+            $table->foreignId('student_enrollment_id')->nullable()->constrained('student_enrollments')->restrictOnDelete();
             $table->date('attendance_date');
             $table->enum('status', ['present', 'late', 'sick', 'permission', 'absent']);
             $table->string('notes', 255)->nullable();

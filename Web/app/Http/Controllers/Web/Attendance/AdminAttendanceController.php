@@ -149,7 +149,7 @@ class AdminAttendanceController extends Controller
         $perPage = min(max((int) $request->input('per_page', 10), 10), 100);
         $attendances = $query->orderByDesc('recorded_at')->paginate($perPage);
         $attendances->appends($filters + ['per_page' => $perPage]);
-        $classrooms = $this->classroomService->getRunningClassrooms();
+        $classrooms = $this->classroomService->getFilterableClassrooms();
 
         return view('admin.attendances.index', array_merge(compact('attendances', 'classrooms'), $filters, [
             'attendanceType' => $attendanceType,
@@ -198,8 +198,7 @@ class AdminAttendanceController extends Controller
         }
 
         if ($filters['classroom_id']) {
-            $classroomId = $filters['classroom_id'];
-            $query->whereHas('user.student', fn (Builder $query) => $query->where('classroom_id', $classroomId));
+            $query->where('classroom_id', $filters['classroom_id']);
         }
 
         if ($filters['approval'] === 'pending') {

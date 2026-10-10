@@ -13,7 +13,11 @@ return new class extends Migration
     {
         Schema::create('attendances', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            // Riwayat presensi dilindungi: user tidak dapat dihapus permanen.
+            $table->foreignId('user_id')->constrained()->restrictOnDelete();
+            // Konteks akademik saat presensi dicatat (snapshot), bukan posisi terkini.
+            $table->foreignId('academic_year_id')->constrained('academic_years');
+            $table->foreignId('classroom_id')->nullable()->constrained('classrooms');
             $table->datetime('recorded_at');
             $table->datetime('check_out_time')->nullable();
             $table->decimal('latitude', 10, 7)->nullable();
