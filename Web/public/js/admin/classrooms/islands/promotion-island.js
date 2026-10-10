@@ -87,8 +87,9 @@ export function initPromotionIsland() {
             return 'Rombel tingkat XII tidak dapat dinaikkan. Gunakan aksi Kelulusan.';
         }
 
-        if (option.dataset.level !== nextLevel) {
-            return `Kenaikan kelas harus bertahap satu tingkat. Tingkat ${source.dataset.level} hanya dapat naik ke tingkat ${nextLevel}.`;
+        // Naik kelas: satu tingkat di atas. Tinggal kelas: tingkat yang sama.
+        if (option.dataset.level !== nextLevel && option.dataset.level !== source.dataset.level) {
+            return `Kelas tujuan hanya boleh tingkat ${nextLevel} (naik kelas) atau tingkat ${source.dataset.level} (tinggal kelas).`;
         }
 
         const sourceMajor = source.dataset.major || '';
@@ -97,8 +98,10 @@ export function initPromotionIsland() {
             return `Jurusan tidak boleh berubah. ${source.dataset.name} berjurusan ${sourceMajor}.`;
         }
 
-        if (option.dataset.year <= source.dataset.year) {
-            return `Tahun ajaran kelas tujuan harus lebih baru dari ${source.dataset.year}.`;
+        const sourceStart = Number(source.dataset.yearStart);
+        const targetStart = Number(option.dataset.yearStart);
+        if (!Number.isFinite(sourceStart) || !Number.isFinite(targetStart) || targetStart !== sourceStart + 1) {
+            return `Tahun ajaran kelas tujuan harus tepat satu tahun setelah ${source.dataset.year}.`;
         }
 
         return null;
@@ -214,6 +217,47 @@ export function initPromotionIsland() {
         emptyNoStudents.classList.remove('d-none');
     }
 
+    /**
+     * Filter opsi rombel asal berdasarkan aksi aktif:
+     * - Kenaikan Kelas (promote): hanya rombel tingkat X & XI (level 10 & 11)
+     * - Kelulusan (graduate): hanya rombel tingkat XII (level 12)
+     */
+    function syncSourceOptions() {
+        if (!sourceClassSelect) return;
+
+        const graduating = isGraduating();
+        const allowedLevels = graduating ? ['12', 'xii'] : ['10', '11', 'x', 'xi'];
+        let selectedValid = false;
+
+        Array.from(sourceClassSelect.options).forEach(option => {
+            if (!option.value) return;
+
+            const lvl = String(option.dataset.level || '').toLowerCase();
+            const isAllowed = allowedLevels.includes(lvl);
+
+            option.hidden = !isAllowed;
+            option.style.display = isAllowed ? '' : 'none';
+            option.disabled = !isAllowed;
+
+            if (option.selected && isAllowed) {
+                selectedValid = true;
+            }
+        });
+
+        const helpText = document.getElementById('sourceClassHelpText');
+        if (helpText) {
+            helpText.textContent = graduating
+                ? 'Menampilkan rombel tingkat XII untuk proses kelulusan akhir.'
+                : 'Menampilkan rombel tingkat X dan XI yang memenuhi syarat kenaikan.';
+        }
+
+        // Jika opsi yang sedang terpilih tidak sesuai dengan filter aksi aktif, reset pilihan
+        if (sourceClassSelect.value && !selectedValid) {
+            sourceClassSelect.value = '';
+            sourceClassSelect.dispatchEvent(new Event('change'));
+        }
+    }
+
     // ── Toggle action (Kenaikan vs Kelulusan) ───────────────────────────────
     function handleActionChange() {
         const graduating = isGraduating();
@@ -235,6 +279,7 @@ export function initPromotionIsland() {
                 : '<i class="bi bi-arrow-repeat me-1"></i>Proses Kenaikan Kelas';
         }
 
+        syncSourceOptions();
         syncTargetOptions();
         updateTargetRuleHint();
         updateTargetLabels(graduating ? 'Status Baru: Alumni (Lulus)' : targetLabelFromSelect());

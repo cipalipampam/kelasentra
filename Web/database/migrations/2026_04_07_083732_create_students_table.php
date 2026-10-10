@@ -14,10 +14,11 @@ return new class extends Migration
         Schema::create('students', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->foreignId('classroom_id')->nullable()->constrained('classrooms')->nullOnDelete();
+            // Angkatan masuk siswa (cohort), terpisah dari kelas yang sedang ditempati.
+            $table->foreignId('entry_academic_year_id')->nullable()->constrained('academic_years');
+            $table->foreignId('graduation_academic_year_id')->nullable()->constrained('academic_years');
             $table->string('nis')->unique()->nullable();
             $table->string('nisn')->unique()->nullable();
-            $table->string('grade')->nullable();
             $table->enum('gender', ['male', 'female'])->nullable();
             $table->string('place_of_birth')->nullable();
             $table->date('date_of_birth')->nullable();
@@ -26,9 +27,10 @@ return new class extends Migration
             $table->string('phone_number')->nullable();
             $table->string('profile_picture')->nullable();
             $table->enum('academic_status', ['active', 'graduated', 'transferred', 'dropped'])->default('active');
+            $table->timestamp('graduated_at')->nullable();
             $table->timestamps();
 
-            $table->index(['classroom_id', 'academic_status']);
+            $table->index('academic_status');
         });
     }
 

@@ -24,7 +24,11 @@ class StudentController extends Controller
 
     public function index(Request $request)
     {
-        $query = User::with(['student.classroom', 'roles'])->role('siswa');
+        $query = User::with([
+            'student.currentEnrollment.classroom',
+            'student.latestEnrollment.classroom',
+            'roles',
+        ])->role('siswa');
 
         if ($request->has('search') && $request->search != '') {
             $search = $request->search;
@@ -39,7 +43,7 @@ class StudentController extends Controller
 
         if ($request->filled('classroom_id')) {
             $classroomId = (int) $request->input('classroom_id');
-            $query->whereHas('student', function ($q) use ($classroomId) {
+            $query->whereHas('student.currentEnrollment', function ($q) use ($classroomId) {
                 $q->where('classroom_id', $classroomId);
             });
         }
@@ -52,7 +56,11 @@ class StudentController extends Controller
                 $query->orderBy('name', $direction);
             } else {
                 $query->leftJoin('students', 'users.id', '=', 'students.user_id')
-                    ->leftJoin('classrooms', 'classrooms.id', '=', 'students.classroom_id')
+                    ->leftJoin('student_enrollments', function ($join) {
+                        $join->on('student_enrollments.student_id', '=', 'students.id')
+                            ->whereNull('student_enrollments.ended_at');
+                    })
+                    ->leftJoin('classrooms', 'classrooms.id', '=', 'student_enrollments.classroom_id')
                     ->orderBy('classrooms.level', $direction)
                     ->orderBy('classrooms.name', $direction)
                     ->select('users.*');
@@ -84,14 +92,21 @@ class StudentController extends Controller
 
     public function show($id)
     {
-        $student = User::with(['student.classroom.homeroomTeacher'])->findOrFail($id);
+        $student = User::with([
+            'student.currentEnrollment.classroom.homeroomTeacher',
+            'student.latestEnrollment.classroom.homeroomTeacher',
+            'student.entryAcademicYear',
+        ])->findOrFail($id);
 
         return view('admin.students.detail', compact('student'));
     }
 
     public function edit($id)
     {
-        $student = User::with(['student.classroom'])->findOrFail($id);
+        $student = User::with([
+            'student.currentEnrollment.classroom',
+            'student.latestEnrollment.classroom',
+        ])->findOrFail($id);
 
         $currentClassroomId = $student->student?->classroom_id;
         $classrooms = $this->classroomService->getEnrollableClassrooms($currentClassroomId);

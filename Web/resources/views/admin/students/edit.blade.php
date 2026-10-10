@@ -107,11 +107,28 @@
                                 <input type="text" class="form-control @error('nis') is-invalid @enderror"
                                        id="nis" name="nis" value="{{ old('nis', $student->student->nis ?? '') }}" placeholder="Nomor induk lokal">
                             </div>
+                            @php($studentRecord = $student->student)
+                            @php($currentStatus = old('academic_status', $studentRecord->academic_status ?? 'active'))
                             <div class="col-md-6">
-                                @php($studentRecord = $student->student)
-                                @php($rombelRequired = ! $studentRecord || $studentRecord->isActive())
+                                <label for="academic_status" class="form-label text-dark fw-semibold small">Status Akademik</label>
+                                <select class="form-select @error('academic_status') is-invalid @enderror"
+                                        id="academic_status" name="academic_status" data-student-status-select>
+                                    @foreach(\App\Models\Student::academicStatusLabels() as $statusValue => $statusLabel)
+                                        @if($statusValue !== 'graduated' || $currentStatus === 'graduated')
+                                            <option value="{{ $statusValue }}"
+                                                @selected($currentStatus === $statusValue)
+                                                @disabled($statusValue === 'graduated')>
+                                                {{ $statusLabel }}{{ $statusValue === 'graduated' ? ' — diubah lewat proses kelulusan' : '' }}
+                                            </option>
+                                        @endif
+                                    @endforeach
+                                </select>
+                                @error('academic_status')<div class="invalid-feedback d-block">{{ $message }}</div>@enderror
+                            </div>
+                            <div class="col-md-6">
+                                @php($rombelRequired = $currentStatus === 'active')
                                 <label for="classroom_id" class="form-label text-dark fw-semibold small">
-                                    Rombel @if($rombelRequired)<span class="text-danger">*</span>@endif
+                                    Rombel <span class="text-danger" id="rombelRequiredMark" @if(! $rombelRequired) style="display:none" @endif>*</span>
                                 </label>
                                 <select class="form-select @error('classroom_id') is-invalid @enderror"
                                         id="classroom_id" name="classroom_id"
@@ -120,7 +137,7 @@
                                     <option value="">-- Pilih Rombel --</option>
                                     @foreach($classrooms as $classroom)
                                         <option value="{{ $classroom->id }}" @selected((string) old('classroom_id', $studentRecord->classroom_id ?? '') === (string) $classroom->id)>
-                                            {{ $classroom->name }} — TA {{ $classroom->academic_year }} (sisa {{ $classroom->maxStudents() - $classroom->active_students_count }} kursi)
+                                            {{ $classroom->name }} — TA {{ $classroom->academicYear?->name }} (sisa {{ $classroom->maxStudents() - $classroom->active_students_count }} kursi)
                                         </option>
                                     @endforeach
                                 </select>
@@ -243,5 +260,26 @@ function previewStudentPhoto(input) {
         reader.readAsDataURL(input.files[0]);
     }
 }
+
+// Rombel hanya wajib ketika siswa berstatus aktif.
+(function () {
+    const statusSelect = document.querySelector('[data-student-status-select]');
+    const classroomSelect = document.getElementById('classroom_id');
+    const requiredMark = document.getElementById('rombelRequiredMark');
+
+    if (!statusSelect || !classroomSelect) return;
+
+    const sync = () => {
+        const required = statusSelect.value === 'active';
+        classroomSelect.required = required;
+
+        if (requiredMark) {
+            requiredMark.style.display = required ? '' : 'none';
+        }
+    };
+
+    statusSelect.addEventListener('change', sync);
+    sync();
+})();
 </script>
 @endsection

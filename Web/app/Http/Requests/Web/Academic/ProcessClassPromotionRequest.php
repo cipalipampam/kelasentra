@@ -46,4 +46,3 @@ class ProcessClassPromotionRequest extends FormRequest
         ];
     }
 }
-

@@ -4,6 +4,7 @@ namespace App\Http\Requests\Web\Student;
 
 use App\Rules\EnrollableClassroom;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreStudentRequest extends FormRequest
 {
@@ -16,10 +17,11 @@ class StoreStudentRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
+            // Kunci bisnis yang dipakai baris non-aktif boleh dipakai ulang.
+            'email' => ['required', 'email', Rule::unique('users', 'email')->whereNull('deleted_at')],
             'password' => 'required|min:6',
-            'nis' => 'nullable|unique:students,nis',
-            'nisn' => 'nullable|unique:students,nisn',
+            'nis' => ['nullable', Rule::unique('students', 'nis')->whereNull('deleted_at')],
+            'nisn' => ['nullable', Rule::unique('students', 'nisn')->whereNull('deleted_at')],
             'classroom_id' => ['required', 'integer', 'exists:classrooms,id', new EnrollableClassroom],
             'gender' => 'nullable|in:male,female',
             'place_of_birth' => 'nullable|string|max:100',

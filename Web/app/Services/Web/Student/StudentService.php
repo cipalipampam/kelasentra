@@ -6,11 +6,17 @@ use App\Events\DirectoryChanged;
 use App\Events\SessionInvalidated;
 use App\Models\Classroom;
 use App\Models\User;
+use App\Services\Web\Academic\EnrollmentService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 
 class StudentService
 {
+    public function __construct(
+        private readonly EnrollmentService $enrollments,
+    ) {}
+
     public function createStudent(array $data)
     {
         $fotoPath = null;
@@ -26,12 +32,11 @@ class StudentService
 
         $user->assignRole('siswa');
 
-        // Rombel wajib untuk siswa baru; grade hanya cerminan nama rombel.
+        // Rombel wajib untuk siswa baru; kelas sekarang disimpan sebagai enrollment.
         $classroom = Classroom::findOrFail($data['classroom_id']);
 
-        $user->student()->create([
-            'classroom_id' => $classroom->id,
-            'grade' => $classroom->name,
+        $student = $user->student()->create([
+            'entry_academic_year_id' => $classroom->academic_year_id,
             'nis' => $data['nis'] ?? null,
             'nisn' => $data['nisn'] ?? null,
             'gender' => $data['gender'] ?? null,
@@ -42,6 +47,8 @@ class StudentService
             'phone_number' => $data['phone_number'] ?? null,
             'profile_picture' => $fotoPath,
         ]);
+
+        $this->enrollments->place($student, $classroom);
 
         event(new DirectoryChanged($user->id, 'siswa', 'created'));
 
@@ -71,27 +78,40 @@ class StudentService
             ? Classroom::findOrFail($data['classroom_id'])
             : null;
 
-        $attributes = [
-            'nis' => $data['nis'] ?? null,
-            'nisn' => $data['nisn'] ?? null,
-            'gender' => $data['gender'] ?? null,
-            'place_of_birth' => $data['place_of_birth'] ?? null,
-            'date_of_birth' => $data['date_of_birth'] ?? null,
-            'religion' => $data['religion'] ?? null,
-            'address' => $data['address'] ?? null,
-            'phone_number' => $data['phone_number'] ?? null,
-            'profile_picture' => $fotoPath,
-        ];
+        $student = $user->student()->updateOrCreate(
+            ['user_id' => $user->id],
+            [
+                'nis' => $data['nis'] ?? null,
+                'nisn' => $data['nisn'] ?? null,
+                'gender' => $data['gender'] ?? null,
+                'place_of_birth' => $data['place_of_birth'] ?? null,
+                'date_of_birth' => $data['date_of_birth'] ?? null,
+                'religion' => $data['religion'] ?? null,
+                'address' => $data['address'] ?? null,
+                'phone_number' => $data['phone_number'] ?? null,
+                'profile_picture' => $fotoPath,
+            ]
+        );
 
-        if ($classroom) {
-            $attributes['classroom_id'] = $classroom->id;
-            $attributes['grade'] = $classroom->name;
+        // Status non-aktif (pindah sekolah / keluar) menutup enrollment berjalan.
+        $requestedStatus = $data['academic_status'] ?? null;
+
+        if ($requestedStatus !== null && $requestedStatus !== $student->academic_status) {
+            $student->update(['academic_status' => $requestedStatus]);
+
+            if ($requestedStatus !== 'active') {
+                $this->enrollments->closeCurrent($student);
+            }
         }
 
-        $user->student()->updateOrCreate(
-            ['user_id' => $user->id],
-            $attributes
-        );
+        if ($classroom) {
+            // Angkatan dicatat saat pertama kali ditempatkan, tidak ikut berubah.
+            if ($student->entry_academic_year_id === null) {
+                $student->update(['entry_academic_year_id' => $classroom->academic_year_id]);
+            }
+
+            $this->enrollments->place($student, $classroom);
+        }
 
         event(new DirectoryChanged($user->id, 'siswa', 'updated'));
 
@@ -105,8 +125,18 @@ class StudentService
         if ($currentPic) {
             Storage::disk('public')->delete($currentPic);
         }
-        $user->tokens()->delete();
-        $user->delete();
+
+        DB::transaction(function () use ($user) {
+            // Riwayat tetap tersimpan: baris dinonaktifkan, bukan dihapus permanen.
+            if ($student = $user->student) {
+                $this->enrollments->closeCurrent($student);
+                $student->delete();
+            }
+
+            $user->tokens()->delete();
+            $user->delete();
+        });
+
         event(new DirectoryChanged($userId, 'siswa', 'deleted'));
         event(new SessionInvalidated($userId, 'account_deleted'));
     }
