@@ -1,8 +1,8 @@
 {{-- Modal Tambah Tahun Ajaran --}}
 @php
-    // Tahun pertama kali dibuat sebaiknya langsung berstatus aktif.
-    $defaultCreateStatus = $stats['active'] === 0
-        ? \App\Models\AcademicYear::STATUS_ACTIVE
+    // Tahun pertama kali dibuat sebaiknya langsung menjadi periode berjalan.
+    $defaultCreateStatus = $stats['current'] === 0
+        ? \App\Models\AcademicYear::STATUS_CURRENT
         : \App\Models\AcademicYear::STATUS_UPCOMING;
 @endphp
 <div class="modal fade" id="createModal" tabindex="-1" aria-labelledby="createAcademicYearModalLabel" aria-hidden="true">

@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Classroom extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     public const LEVEL_X = '10';
 
@@ -24,7 +25,7 @@ class Classroom extends Model
         'level',
         'major',
         'section',
-        'academic_year',
+        'academic_year_id',
         'homeroom_teacher_id',
         'is_active',
     ];
@@ -54,7 +55,7 @@ class Classroom extends Model
 
     public function activeStudentCount(): int
     {
-        return $this->students()->where('academic_status', 'active')->count();
+        return $this->currentEnrollments()->count();
     }
 
     /**
@@ -90,7 +91,19 @@ class Classroom extends Model
      */
     public function sectionKey(): string
     {
-        return $this->level.'|'.($this->major ?? '').'|'.$this->academic_year;
+        return $this->level.'|'.($this->major ?? '').'|'.$this->academic_year_id;
+    }
+
+    /**
+     * Rombel operasional: diaktifkan dan tahun ajarannya belum selesai.
+     */
+    public function isOperable(): bool
+    {
+        if (! $this->is_active) {
+            return false;
+        }
+
+        return $this->academicYear?->isOperable() ?? false;
     }
 
     /**
@@ -110,9 +123,7 @@ class Classroom extends Model
      */
     public function promotionBlockReason(?self $target, int $incomingStudents): ?string
     {
-        $nextLevel = $this->nextLevel();
-
-        if ($nextLevel === null) {
+        if ($this->level === self::LEVEL_XII) {
             return 'Rombel tingkat XII tidak dapat dinaikkan. Gunakan proses kelulusan.';
         }
 
@@ -124,16 +135,24 @@ class Classroom extends Model
             return "Kelas tujuan {$target->name} sudah tidak aktif sehingga tidak dapat menerima siswa.";
         }
 
-        if ($target->level !== $nextLevel) {
-            return "Kenaikan kelas harus bertahap satu tingkat. {$this->name} (tingkat {$this->level}) hanya dapat naik ke tingkat {$nextLevel}.";
+        if (! $target->academicYear?->isOperable()) {
+            return "Tahun ajaran kelas tujuan ({$target->academicYear?->name}) sudah selesai sehingga tidak dapat menerima siswa.";
+        }
+
+        // Naik kelas: satu tingkat di atas. Tinggal kelas: tingkat yang sama.
+        if ($target->level !== $this->nextLevel() && $target->level !== $this->level) {
+            return "Kelas tujuan hanya boleh tingkat {$this->nextLevel()} (naik kelas) atau tingkat {$this->level} (tinggal kelas).";
         }
 
         if ($this->major !== null && $target->major !== $this->major) {
             return "Jurusan tidak boleh berubah saat kenaikan kelas. {$this->name} berjurusan {$this->major}.";
         }
 
-        if ($target->academic_year <= $this->academic_year) {
-            return "Tahun ajaran kelas tujuan harus lebih baru dari {$this->academic_year}.";
+        $sourceYear = $this->academicYear?->start_year;
+        $targetYear = $target->academicYear?->start_year;
+
+        if ($sourceYear === null || $targetYear === null || $targetYear !== $sourceYear + 1) {
+            return 'Tahun ajaran kelas tujuan harus tepat satu tahun setelah '.($this->academicYear?->name ?? 'tahun ajaran asal').'.';
         }
 
         if (! $target->hasRoomFor($incomingStudents)) {
@@ -155,24 +174,35 @@ class Classroom extends Model
         return null;
     }
 
+    /** Wali kelas yang akunnya dinonaktifkan tetap tampil sebagai riwayat rombel. */
     public function homeroomTeacher(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'homeroom_teacher_id');
+        return $this->belongsTo(User::class, 'homeroom_teacher_id')->withTrashed();
     }
 
-    public function students(): HasMany
+    public function enrollments(): HasMany
     {
-        return $this->hasMany(Student::class);
+        return $this->hasMany(StudentEnrollment::class);
     }
 
-    public function schedules(): HasMany
+    /**
+     * Enrollment yang masih berjalan; inilah penghuni rombel saat ini.
+     */
+    public function currentEnrollments(): HasMany
     {
-        return $this->hasMany(Schedule::class);
+        // Siswa yang akunnya sudah dihapus tidak lagi dihitung sebagai penghuni.
+        return $this->enrollments()
+            ->whereNull('ended_at')
+            ->whereHas('student');
+    }
+
+    public function teachingAssignments(): HasMany
+    {
+        return $this->hasMany(TeachingAssignment::class);
     }
 
     public function academicYear(): BelongsTo
     {
-        return $this->belongsTo(AcademicYear::class, 'academic_year', 'name');
+        return $this->belongsTo(AcademicYear::class, 'academic_year_id');
     }
 }
-

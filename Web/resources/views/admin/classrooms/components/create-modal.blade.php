@@ -30,7 +30,7 @@
                             </div>
                             <input type="text" name="name" id="create_name" class="form-control"
                                    placeholder="Contoh: X IPA 1, XI TKJ 2" value="{{ old('name') }}" required>
-                            <div class="form-text small text-muted">Format standar: [Tingkat Romawi] [Jurusan] [Nomor Rombel]</div>
+                            {{-- <div class="form-text small text-muted">Format standar: [Tingkat Romawi] [Jurusan] [Nomor Rombel]</div> --}}
                         </div>
 
                         <div class="col-md-4">
@@ -55,7 +55,7 @@
                                     <option value="{{ $major }}" {{ old('major') === $major ? 'selected' : '' }}>{{ $major }}</option>
                                 @endforeach
                             </select>
-                            <div class="form-text small text-muted">Wajib untuk tingkat XI dan XII.</div>
+                            {{-- <div class="form-text small text-muted">Wajib untuk tingkat XI dan XII.</div> --}}
                         </div>
 
                         <div class="col-md-4">
@@ -74,22 +74,22 @@
                             <label for="create_academic_year" class="form-label text-dark fw-semibold small">
                                 Tahun Ajaran <span class="text-danger">*</span>
                             </label>
-                            <select name="academic_year" id="create_academic_year" class="form-select"
+                            <select name="academic_year_id" id="create_academic_year" class="form-select"
                                     data-academic-year-select required
-                                    {{ empty($academicYears) ? 'disabled' : '' }}>
+                                    {{ $academicYears->isEmpty() ? 'disabled' : '' }}>
                                 <option value="">— Pilih Tahun Ajaran —</option>
                                 @foreach($academicYears as $year)
-                                    <option value="{{ $year }}" {{ old('academic_year', $activeAcademicYear) === $year ? 'selected' : '' }}>
-                                        {{ $year }}
+                                    <option value="{{ $year->id }}"
+                                            data-year-name="{{ $year->name }}"
+                                            @selected((string) old('academic_year_id', $currentAcademicYear?->id) === (string) $year->id)>
+                                        {{ $year->name }} — {{ $year->statusLabel() }}
                                     </option>
                                 @endforeach
                             </select>
-                            @if(empty($academicYears))
+                            @if($academicYears->isEmpty())
                                 <div class="form-text small text-danger">
-                                    Belum ada tahun ajaran aktif. Tambahkan dulu di menu Tahun Ajaran.
+                                    Belum ada tahun ajaran berjalan atau yang akan datang. Tambahkan dulu di menu Tahun Ajaran.
                                 </div>
-                            @else
-                                <div class="form-text small text-muted">Hanya tahun ajaran aktif atau yang akan datang.</div>
                             @endif
                         </div>
 
@@ -108,9 +108,9 @@
                                     </option>
                                 @endforeach
                             </select>
-                            <div class="form-text small text-muted">
+                            {{-- <div class="form-text small text-muted">
                                 Hanya guru berstatus aktif. Satu guru hanya boleh menjadi wali kelas satu rombel per tahun ajaran.
-                            </div>
+                            </div> --}}
                         </div>
 
                         <div class="col-12">
@@ -121,16 +121,16 @@
                                     Rombel Aktif (tampil dan bisa digunakan untuk pencatatan presensi siswa)
                                 </label>
                             </div>
-                            <div class="form-text small text-muted">
+                            {{-- <div class="form-text small text-muted">
                                 Rombel nonaktif tidak menyimpan wali kelas dan tidak dapat menerima siswa baru.
-                            </div>
+                            </div> --}}
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer border-0 pt-0 pb-4 px-4">
                     <button type="button" class="btn btn-sm btn-light border px-4" data-bs-dismiss="modal">Batal</button>
                     <button type="submit" class="btn btn-sm btn-primary px-4 fw-semibold shadow-xs"
-                            {{ empty($academicYears) ? 'disabled' : '' }}>
+                            {{ $academicYears->isEmpty() ? 'disabled' : '' }}>
                         <i class="bi bi-plus-lg me-1"></i>Simpan Rombel
                     </button>
                 </div>

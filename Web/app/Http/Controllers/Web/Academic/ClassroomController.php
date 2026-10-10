@@ -23,35 +23,39 @@ class ClassroomController extends Controller
 
     public function index(Request $request): View
     {
+        $showHistory = $request->boolean('show_history');
+
         $classrooms = $this->classroomService->getPaginatedClassrooms(
-            $request->only(['level', 'major', 'search']),
+            $request->only(['level', 'major', 'search', 'show_history']),
             10,
         );
 
         $teachers = $this->classroomService->getEligibleHomeroomTeachers();
         $homeroomAssignments = $this->classroomService->getHomeroomAssignments();
         $sectionOverview = $this->classroomService->getSectionOverview();
-        $academicYears = AcademicYear::selectableNames();
-        $activeAcademicYear = AcademicYear::query()
-            ->where('status', AcademicYear::STATUS_ACTIVE)
-            ->orderByDesc('name')
-            ->value('name');
+        $academicYears = AcademicYear::operableYears();
+        $allAcademicYears = AcademicYear::with('classrooms:id,academic_year_id,name,level,major,section')
+            ->orderByDesc('start_year')
+            ->get();
+        $currentAcademicYear = AcademicYear::currentYear();
         $majors = config('classroom.majors');
         $studentCapacity = Classroom::studentCapacity();
 
         $stats = [
-            'total' => Classroom::count(),
-            'active' => Classroom::where('is_active', true)->count(),
+            'total'    => Classroom::count(),
+            'active'   => Classroom::where('is_active', true)->count(),
             'inactive' => Classroom::where('is_active', false)->count(),
         ];
 
         return view('admin.classrooms.index', compact(
             'classrooms',
+            'showHistory',
             'teachers',
             'homeroomAssignments',
             'sectionOverview',
             'academicYears',
-            'activeAcademicYear',
+            'allAcademicYears',
+            'currentAcademicYear',
             'majors',
             'studentCapacity',
             'stats',
@@ -148,14 +152,6 @@ class ClassroomController extends Controller
             ? "Sukses! Sebanyak {$batch->student_count} siswa dari {$batch->source_classroom_name} berhasil dipromosikan ke {$batch->target_classroom_name}."
             : "Sukses! Sebanyak {$batch->student_count} siswa dari {$batch->source_classroom_name} telah diproses status kelulusannya.";
 
-        if ($batch->source_classroom_closed) {
-            $message .= " Rombel {$batch->source_classroom_name} ditutup karena tidak ada siswa aktif tersisa";
-
-            $message .= $batch->homeroom_teacher_name !== null
-                ? ", dan wali kelas {$batch->homeroom_teacher_name} dilepas sehingga bisa dirotasi ke rombel lain."
-                : '.';
-        }
-
         return redirect()->route('admin.classrooms.promotion')
             ->with('success', $message);
     }
@@ -177,15 +173,39 @@ class ClassroomController extends Controller
             $message .= " {$result['missing_classroom']} siswa dilewati karena rombel asalnya sudah dihapus.";
         }
 
-        if ($result['reopened']) {
-            $message .= " Rombel {$promotionBatch->source_classroom_name} dibuka kembali";
+        return redirect()->route('admin.classrooms.promotion')
+            ->with('success', $message);
+    }
 
-            $message .= $result['homeroom_teacher_name'] !== null
-                ? " beserta wali kelas {$result['homeroom_teacher_name']}."
-                : '.';
+    /**
+     * Menduplikasi batch rombel dari satu tahun ajaran ke tahun ajaran lain.
+     */
+    public function duplicateClassrooms(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'source_academic_year_id' => ['required', 'integer', 'exists:academic_years,id'],
+            'target_academic_year_id' => ['required', 'integer', 'exists:academic_years,id', 'different:source_academic_year_id'],
+            'classroom_ids'           => ['required', 'array', 'min:1'],
+            'classroom_ids.*'         => ['integer', 'exists:classrooms,id'],
+        ], [
+            'source_academic_year_id.required' => 'Tahun ajaran sumber wajib dipilih.',
+            'target_academic_year_id.required' => 'Tahun ajaran tujuan wajib dipilih.',
+            'target_academic_year_id.different' => 'Tahun ajaran tujuan harus berbeda dari sumber.',
+            'classroom_ids.required'           => 'Pilih minimal satu rombel untuk diduplikasi.',
+        ]);
+
+        $result = $this->classroomService->duplicateClassroomsFromYear(
+            $request->input('classroom_ids', []),
+            (int) $request->input('target_academic_year_id'),
+        );
+
+        $message = "{$result['created']} rombel berhasil diduplikasi ke tahun ajaran tujuan.";
+
+        if ($result['skipped'] > 0) {
+            $message .= " {$result['skipped']} rombel dilewati karena nama sudah ada di tahun tujuan.";
         }
 
-        return redirect()->route('admin.classrooms.promotion')
+        return redirect()->route('admin.classrooms.index')
             ->with('success', $message);
     }
 }

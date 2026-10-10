@@ -16,11 +16,15 @@ use Illuminate\Validation\ValidationException;
 
 class ClassroomService
 {
+    public function __construct(
+        private readonly EnrollmentService $enrollments,
+    ) {}
+
     public function getPaginatedClassrooms(array $filters = [], int $perPage = 10): LengthAwarePaginator
     {
         $query = Classroom::with(['homeroomTeacher'])->withCount([
-            'students',
-            'students as active_students_count' => fn ($studentQuery) => $studentQuery->where('academic_status', 'active'),
+            'enrollments',
+            'currentEnrollments as active_students_count',
         ]);
 
         if (! empty($filters['level'])) {
@@ -35,8 +39,14 @@ class ClassroomService
             $search = $filters['search'];
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('academic_year', 'like', "%{$search}%");
+                    ->orWhereHas('academicYear', fn ($q) => $q->where('name', 'like', "%{$search}%"));
             });
+        }
+
+        // Secara default hanya tampilkan rombel dari tahun ajaran yang sedang
+        // berjalan atau akan datang. Jika show_history aktif, tampilkan semua.
+        if (empty($filters['show_history'])) {
+            $query->whereHas('academicYear', fn ($q) => $q->whereIn('status', AcademicYear::OPERABLE_STATUSES));
         }
 
         return $query->orderBy('level')->orderBy('name')->paginate($perPage)->withQueryString();
@@ -45,9 +55,8 @@ class ClassroomService
     public function getAllActiveClassrooms(): Collection
     {
         return Classroom::where('is_active', true)
-            ->withCount([
-                'students as active_students_count' => fn ($query) => $query->where('academic_status', 'active'),
-            ])
+            ->with('academicYear:id,name,start_year,status')
+            ->withCount(['currentEnrollments as active_students_count'])
             ->orderBy('level')
             ->orderBy('name')
             ->get();
@@ -62,22 +71,38 @@ class ClassroomService
      */
     public function getRunningClassrooms(): Collection
     {
-        $academicYears = AcademicYear::selectableNames();
+        $academicYearIds = AcademicYear::operableIds();
 
-        if ($academicYears === []) {
+        if ($academicYearIds === []) {
             return new Collection;
         }
 
         return $this->sortByLevelMajorSection(
             Classroom::query()
-                ->whereIn('academic_year', $academicYears)
+                ->whereIn('academic_year_id', $academicYearIds)
                 ->where('is_active', true)
-                ->with(['homeroomTeacher:id,name'])
-                ->withCount([
-                    'students as active_students_count' => fn ($query) => $query->where('academic_status', 'active'),
-                ])
+                ->with(['homeroomTeacher:id,name', 'academicYear:id,name,start_year,status'])
+                ->withCount(['currentEnrollments as active_students_count'])
                 ->get()
         );
+    }
+
+    /**
+     * Seluruh rombel, termasuk tahun ajaran yang sudah ditutup, untuk filter
+     * laporan historis: presensi periode lama harus tetap bisa ditelusuri.
+     */
+    public function getFilterableClassrooms(): Collection
+    {
+        return Classroom::query()
+            ->with('academicYear:id,name,start_year,status')
+            ->orderByDesc(
+                AcademicYear::query()
+                    ->select('start_year')
+                    ->whereColumn('academic_years.id', 'classrooms.academic_year_id')
+            )
+            ->orderBy('level')
+            ->orderBy('name')
+            ->get();
     }
 
     /**
@@ -89,15 +114,20 @@ class ClassroomService
      */
     public function getEnrollableClassrooms(?int $includeClassroomId = null): Collection
     {
+        // Enrollment baru hanya untuk periode berjalan dan tepat satu periode berikutnya.
+        $enrollableYearIds = collect([
+            AcademicYear::currentYear()?->getKey(),
+            AcademicYear::nextYear()?->getKey(),
+        ])->filter()->all();
+
         $classrooms = $this->getRunningClassrooms()
+            ->filter(fn (Classroom $classroom) => in_array($classroom->academic_year_id, $enrollableYearIds, true))
             ->filter(fn (Classroom $classroom) => $classroom->active_students_count < $classroom->maxStudents());
 
         if ($includeClassroomId && ! $classrooms->contains('id', $includeClassroomId)) {
             $current = Classroom::query()
-                ->with(['homeroomTeacher:id,name'])
-                ->withCount([
-                    'students as active_students_count' => fn ($query) => $query->where('academic_status', 'active'),
-                ])
+                ->with(['homeroomTeacher:id,name', 'academicYear:id,name,start_year,status'])
+                ->withCount(['currentEnrollments as active_students_count'])
                 ->find($includeClassroomId);
 
             if ($current) {
@@ -117,7 +147,7 @@ class ClassroomService
                 (string) $classroom->level,
                 $majorRank[$classroom->major] ?? PHP_INT_MAX,
                 (string) $classroom->section,
-                (string) $classroom->academic_year,
+                (int) ($classroom->academicYear?->start_year ?? 0),
             ])
             ->values();
     }
@@ -141,9 +171,9 @@ class ClassroomService
     {
         return Classroom::query()
             ->whereNotNull('homeroom_teacher_id')
-            ->get(['homeroom_teacher_id', 'academic_year'])
+            ->get(['homeroom_teacher_id', 'academic_year_id'])
             ->groupBy('homeroom_teacher_id')
-            ->map(fn ($rows) => $rows->pluck('academic_year')->unique()->values()->all())
+            ->map(fn ($rows) => $rows->pluck('academic_year_id')->unique()->values()->all())
             ->all();
     }
 
@@ -159,10 +189,8 @@ class ClassroomService
     public function getSectionOverview(): array
     {
         return Classroom::query()
-            ->withCount([
-                'students as active_students_count' => fn ($query) => $query->where('academic_status', 'active'),
-            ])
-            ->get(['id', 'level', 'major', 'academic_year', 'section'])
+            ->withCount(['currentEnrollments as active_students_count'])
+            ->get(['id', 'level', 'major', 'academic_year_id', 'section'])
             ->groupBy(fn (Classroom $classroom) => $classroom->sectionKey())
             ->map(fn (Collection $classrooms) => $classrooms
                 ->sortBy(fn (Classroom $classroom) => $classroom->hasNumericSection() ? (int) $classroom->section : PHP_INT_MAX)
@@ -180,7 +208,7 @@ class ClassroomService
     public function getStudentsByClassroom(int $classroomId, ?string $status = 'active'): Collection
     {
         $query = Student::with('user')
-            ->where('classroom_id', $classroomId);
+            ->whereHas('currentEnrollment', fn ($enrollment) => $enrollment->where('classroom_id', $classroomId));
 
         if ($status !== null) {
             $query->where('academic_status', $status);
@@ -217,9 +245,14 @@ class ClassroomService
 
     public function deleteClassroom(Classroom $classroom): bool
     {
-        if ($classroom->students()->count() > 0) {
+        if ($classroom->enrollments()->count() > 0) {
             return false;
         }
+
+        // Rombel yang dinonaktifkan melepas slot wali kelasnya: unique
+        // (homeroom_teacher_id, academic_year_id) tetap berlaku untuk baris
+        // ter-soft-delete, sehingga gurunya tidak boleh terikat di sana.
+        $classroom->update(['homeroom_teacher_id' => null]);
 
         return (bool) $classroom->delete();
     }
@@ -243,9 +276,9 @@ class ClassroomService
             $studentIds = array_values(array_unique($data['student_ids'] ?? []));
 
             // Hanya siswa yang masih aktif di rombel asal yang boleh diproses.
-            $students = Student::with('user')
+            $students = Student::with(['user', 'currentEnrollment'])
                 ->whereIn('id', $studentIds)
-                ->where('classroom_id', $sourceClass->id)
+                ->whereHas('currentEnrollment', fn ($enrollment) => $enrollment->where('classroom_id', $sourceClass->id))
                 ->where('academic_status', 'active')
                 ->get();
 
@@ -273,20 +306,14 @@ class ClassroomService
                 ]);
             }
 
-            $closesSourceClassroom = $sourceClass->is_active
-                && $sourceClass->activeStudentCount() === $students->count();
-
             $batch = PromotionBatch::create([
                 'action' => $action,
                 'source_classroom_id' => $sourceClass->id,
                 'source_classroom_name' => $sourceClass->name,
-                'source_academic_year' => $sourceClass->academic_year,
+                'source_academic_year' => $sourceClass->academicYear?->name,
                 'target_classroom_id' => $targetClass?->id,
                 'target_classroom_name' => $targetClass?->name,
-                'target_academic_year' => $targetClass?->academic_year,
-                'source_classroom_closed' => $closesSourceClassroom,
-                'homeroom_teacher_id' => $closesSourceClassroom ? $sourceClass->homeroom_teacher_id : null,
-                'homeroom_teacher_name' => $closesSourceClassroom ? $sourceClass->homeroomTeacher?->name : null,
+                'target_academic_year' => $targetClass?->academicYear?->name,
                 'performed_by' => $actor->id,
                 'performed_by_name' => $actor->name,
                 'student_count' => $students->count(),
@@ -301,9 +328,9 @@ class ClassroomService
                     'student_id' => $student->id,
                     'student_name' => $student->user?->name ?? 'Siswa #'.$student->id,
                     'student_nis' => $student->nis,
-                    'from_classroom_id' => $student->classroom_id,
+                    'from_classroom_id' => $student->currentEnrollment?->classroom_id,
                     'from_classroom_name' => $sourceClass->name,
-                    'from_grade' => $student->getRawOriginal('grade'),
+                    'from_grade' => $sourceClass->name,
                     'from_academic_status' => $student->academic_status,
                     'to_classroom_id' => $isPromotion ? $targetClass->id : null,
                     'to_academic_status' => $isPromotion ? 'active' : 'graduated',
@@ -311,11 +338,17 @@ class ClassroomService
                     'updated_at' => $now,
                 ];
 
-                $student->update([
-                    'classroom_id' => $isPromotion ? $targetClass->id : null,
-                    'grade' => $isPromotion ? $targetClass->name : $student->grade,
-                    'academic_status' => $isPromotion ? 'active' : 'graduated',
-                ]);
+                if ($isPromotion) {
+                    // Menutup enrollment rombel asal dan membuka enrollment rombel tujuan.
+                    $this->enrollments->place($student, $targetClass);
+                } else {
+                    $this->enrollments->closeCurrent($student);
+                    $student->update([
+                        'academic_status' => 'graduated',
+                        'graduated_at' => $now,
+                        'graduation_academic_year_id' => $sourceClass->academic_year_id,
+                    ]);
+                }
 
                 // Dibuat satu per satu, bukan bulk insert, karena model
                 // memancarkan event realtime saat notifikasi dibuat.
@@ -324,7 +357,7 @@ class ClassroomService
                         'user_id' => $student->user_id,
                         'title' => $isPromotion ? 'Kenaikan Kelas Baru' : 'Kelulusan Siswa',
                         'body' => $isPromotion
-                            ? "Selamat, Anda telah dipindahkan ke rombel {$targetClass->name} untuk tahun ajaran {$targetClass->academic_year}."
+                            ? "Selamat, Anda telah dipindahkan ke rombel {$targetClass->name} untuk tahun ajaran {$targetClass->academicYear?->name}."
                             : "Status akademik Anda telah diperbarui menjadi Alumni (Lulus) dari rombel {$sourceClass->name}.",
                         'type' => 'announcement',
                         'data' => $isPromotion
@@ -343,20 +376,67 @@ class ClassroomService
             }
 
             // Jejak audit ditulis sekali untuk seluruh siswa.
+            // Rombel asal tidak ditutup: "selesai" ditentukan oleh tahun ajaran
+            // yang berstatus closed, bukan oleh jumlah siswa yang tersisa.
             PromotionBatchItem::insert($itemRows);
-
-            // Rombel asal yang tidak menyisakan siswa aktif lagi dianggap selesai:
-            // ditutup dan wali kelasnya dilepas agar gurunya bisa dirotasi ke
-            // rombel lain, termasuk pada tahun ajaran yang sama.
-            if ($closesSourceClassroom) {
-                $sourceClass->update([
-                    'is_active' => false,
-                    'homeroom_teacher_id' => null,
-                ]);
-            }
 
             return $batch;
         });
+    }
+
+    /**
+     * Menduplikasi struktur rombel dari satu tahun ajaran ke tahun ajaran lain.
+     *
+     * Hanya menyalin atribut struktural (nama, tingkat, jurusan, nomor sesi).
+     * Wali kelas tidak ikut karena rotasi guru adalah keputusan manual admin.
+     * Rombel yang sudah ada di tahun tujuan (nama sama) dilewati secara senyap.
+     *
+     * @param  int[]  $classroomIds  ID rombel yang dipilih dari TA sumber
+     * @return array{created: int, skipped: int}
+     */
+    public function duplicateClassroomsFromYear(array $classroomIds, int $targetAcademicYearId): array
+    {
+        $targetYear = AcademicYear::findOrFail($targetAcademicYearId);
+
+        if (! $targetYear->isOperable()) {
+            throw ValidationException::withMessages([
+                'target_academic_year_id' => 'Tahun ajaran tujuan sudah selesai dan tidak dapat menerima rombel baru.',
+            ]);
+        }
+
+        $sources = Classroom::whereIn('id', $classroomIds)->get();
+
+        // Nama rombel yang sudah ada di tahun tujuan (untuk cek duplikat).
+        $existingNames = Classroom::where('academic_year_id', $targetAcademicYearId)
+            ->whereNull('deleted_at')
+            ->pluck('name')
+            ->map(fn ($n) => strtolower($n))
+            ->all();
+
+        $created = 0;
+        $skipped = 0;
+
+        foreach ($sources as $source) {
+            if (in_array(strtolower($source->name), $existingNames, true)) {
+                $skipped++;
+                continue;
+            }
+
+            Classroom::create([
+                'name'               => $source->name,
+                'level'              => $source->level,
+                'major'              => $source->major,
+                'section'            => $source->section,
+                'academic_year_id'   => $targetAcademicYearId,
+                'homeroom_teacher_id' => null,
+                'is_active'          => true,
+            ]);
+
+            $existingNames[] = strtolower($source->name);
+            $created++;
+        }
+
+        return ['created' => $created, 'skipped' => $skipped];
     }
 
     /**
@@ -377,7 +457,7 @@ class ClassroomService
      * Siswa yang datanya sudah berubah lagi setelah batch berjalan dilewati
      * agar pembatalan tidak menimpa perubahan yang lebih baru.
      *
-     * @return array{restored: int, skipped: int, missing_classroom: int, reopened: bool, homeroom_teacher_name: ?string}
+     * @return array{restored: int, skipped: int, missing_classroom: int}
      */
     public function revertBatch(PromotionBatch $batch, User $actor): array
     {
@@ -405,19 +485,29 @@ class ClassroomService
                     continue;
                 }
 
+                $currentClassroomId = $student?->currentEnrollment()->value('classroom_id');
+
                 if ($student === null
-                    || (int) $student->classroom_id !== (int) $item->to_classroom_id
+                    || (int) $currentClassroomId !== (int) $item->to_classroom_id
                     || $student->academic_status !== $item->to_academic_status) {
                     $skipped++;
 
                     continue;
                 }
 
+                // Status identitas dipulihkan lebih dulu agar invariant
+                // "enrollment berjalan hanya untuk siswa aktif" tetap terjaga.
                 $student->update([
-                    'classroom_id' => $item->from_classroom_id,
-                    'grade' => $item->from_grade,
                     'academic_status' => $item->from_academic_status,
+                    'graduated_at' => null,
+                    'graduation_academic_year_id' => null,
                 ]);
+
+                $fromClassroom = Classroom::find($item->from_classroom_id);
+
+                if ($fromClassroom !== null) {
+                    $this->enrollments->place($student, $fromClassroom);
+                }
 
                 if ($student->user_id) {
                     AppNotification::create([
@@ -444,66 +534,11 @@ class ClassroomService
                 'reverted_by_name' => $actor->name,
             ]);
 
-            $reopened = $this->reopenSourceClassroom($batch, $restored);
-
             return [
                 'restored' => $restored,
                 'skipped' => $skipped,
                 'missing_classroom' => $missingClassroom,
-                'reopened' => $reopened['reopened'],
-                'homeroom_teacher_name' => $reopened['homeroom_teacher_name'],
             ];
         });
-    }
-
-    /**
-     * Membuka kembali rombel asal yang ditutup batch ini, lengkap dengan wali
-     * kelasnya.
-     *
-     * Wali kelas hanya dikembalikan bila kursinya belum dipakai rombel lain
-     * pada tahun ajaran yang sama, agar aturan satu guru satu rombel per tahun
-     * ajaran tidak dilanggar.
-     *
-     * @return array{reopened: bool, homeroom_teacher_name: ?string}
-     */
-    private function reopenSourceClassroom(PromotionBatch $batch, int $restoredStudents): array
-    {
-        $nothingToDo = ['reopened' => false, 'homeroom_teacher_name' => null];
-
-        if (! $batch->source_classroom_closed || $restoredStudents === 0) {
-            return $nothingToDo;
-        }
-
-        $sourceClass = $batch->source_classroom_id !== null
-            ? Classroom::find($batch->source_classroom_id)
-            : null;
-
-        if ($sourceClass === null) {
-            return $nothingToDo;
-        }
-
-        $homeroomTeacherId = $batch->homeroom_teacher_id;
-
-        if ($homeroomTeacherId !== null) {
-            $isTakenElsewhere = Classroom::query()
-                ->where('homeroom_teacher_id', $homeroomTeacherId)
-                ->where('academic_year', $sourceClass->academic_year)
-                ->whereKeyNot($sourceClass->id)
-                ->exists();
-
-            if ($isTakenElsewhere) {
-                $homeroomTeacherId = null;
-            }
-        }
-
-        $sourceClass->update([
-            'is_active' => true,
-            'homeroom_teacher_id' => $homeroomTeacherId,
-        ]);
-
-        return [
-            'reopened' => true,
-            'homeroom_teacher_name' => $homeroomTeacherId !== null ? $batch->homeroom_teacher_name : null,
-        ];
     }
 }

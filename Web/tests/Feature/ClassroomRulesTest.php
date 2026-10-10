@@ -29,7 +29,7 @@ class ClassroomRulesTest extends TestCase
         return $admin;
     }
 
-    private function createAcademicYear(string $name, string $status = AcademicYear::STATUS_ACTIVE): AcademicYear
+    private function createAcademicYear(string $name, string $status = AcademicYear::STATUS_CURRENT): AcademicYear
     {
         return AcademicYear::create(['name' => $name, 'status' => $status]);
     }
@@ -50,22 +50,14 @@ class ClassroomRulesTest extends TestCase
             'level' => '10',
             'major' => null,
             'section' => '1',
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
             'is_active' => true,
         ], $attributes));
     }
 
     private function createStudentIn(Classroom $classroom, int $index): Student
     {
-        $user = User::factory()->create();
-        $user->assignRole('siswa');
-
-        return Student::create([
-            'user_id' => $user->id,
-            'classroom_id' => $classroom->id,
-            'nis' => 'S'.$classroom->id.'-'.$index,
-            'academic_status' => 'active',
-        ]);
+        return $this->enrollStudent($classroom, 'S'.$classroom->id.'-'.$index);
     }
 
     private function validPayload(array $overrides = []): array
@@ -74,7 +66,7 @@ class ClassroomRulesTest extends TestCase
             'name' => 'X MIPA 1',
             'level' => '10',
             'section' => '1',
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
             'is_active' => '1',
         ], $overrides);
     }
@@ -99,10 +91,10 @@ class ClassroomRulesTest extends TestCase
         $admin = $this->createAdmin();
         $this->createAcademicYear('2026/2027');
         $this->createAcademicYear('2027/2028', AcademicYear::STATUS_UPCOMING);
-        $this->createClassroom(['name' => 'X MIPA 1', 'academic_year' => '2026/2027']);
+        $this->createClassroom(['name' => 'X MIPA 1', 'academic_year_id' => $this->yearId('2026/2027')]);
 
         $response = $this->actingAs($admin)
-            ->post(route('admin.classrooms.store'), $this->validPayload(['name' => 'X MIPA 1', 'academic_year' => '2027/2028']));
+            ->post(route('admin.classrooms.store'), $this->validPayload(['name' => 'X MIPA 1', 'academic_year_id' => $this->yearId('2027/2028')]));
 
         $response->assertSessionHasNoErrors()
             ->assertRedirect(route('admin.classrooms.index'));
@@ -146,10 +138,10 @@ class ClassroomRulesTest extends TestCase
         $admin = $this->createAdmin();
         $this->createAcademicYear('2026/2027');
         $this->createAcademicYear('2027/2028', AcademicYear::STATUS_UPCOMING);
-        $this->createClassroom(['name' => 'X MIPA 1', 'academic_year' => '2026/2027']);
+        $this->createClassroom(['name' => 'X MIPA 1', 'academic_year_id' => $this->yearId('2026/2027')]);
 
         $response = $this->actingAs($admin)
-            ->post(route('admin.classrooms.store'), $this->validPayload(['academic_year' => '2027/2028']));
+            ->post(route('admin.classrooms.store'), $this->validPayload(['academic_year_id' => $this->yearId('2027/2028')]));
 
         $response->assertSessionHasNoErrors()->assertRedirect(route('admin.classrooms.index'));
         $this->assertSame(2, Classroom::query()->where('section', '1')->count());
@@ -216,6 +208,32 @@ class ClassroomRulesTest extends TestCase
             ->assertSessionHasNoErrors();
 
         $this->assertSame($teacher->id, $other->fresh()->homeroom_teacher_id);
+    }
+
+    public function test_teacher_released_by_deletion_can_take_another_classroom(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027');
+        $teacher = $this->createTeacher();
+        $deleted = $this->createClassroom(['name' => 'X MIPA 1', 'homeroom_teacher_id' => $teacher->id]);
+        $other = $this->createClassroom(['name' => 'X MIPA 2', 'section' => '2']);
+
+        $this->actingAs($admin)
+            ->delete(route('admin.classrooms.destroy', $deleted->id))
+            ->assertSessionHas('success');
+
+        // Rombel terhapus tidak boleh menyandera slot wali kelas: unique
+        // (homeroom_teacher_id, academic_year_id) tetap berlaku untuk baris nonaktif.
+        $this->actingAs($admin)
+            ->put(route('admin.classrooms.update', $other->id), $this->validPayload([
+                'name' => 'X MIPA 2',
+                'section' => '2',
+                'homeroom_teacher_id' => $teacher->id,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($teacher->id, $other->fresh()->homeroom_teacher_id);
+        $this->assertSoftDeleted('classrooms', ['id' => $deleted->id]);
     }
 
     public function test_inactive_classroom_does_not_keep_a_homeroom_teacher(): void
@@ -315,22 +333,21 @@ class ClassroomRulesTest extends TestCase
 
     // ── Rule 5: tahun ajaran valid ───────────────────────────────────────────
 
-    public function test_academic_year_must_be_active_or_upcoming(): void
+    public function test_academic_year_must_be_operable(): void
     {
         $admin = $this->createAdmin();
-        $this->createAcademicYear('2025/2026', AcademicYear::STATUS_ARCHIVED);
+        $closed = $this->createAcademicYear('2025/2026', AcademicYear::STATUS_CLOSED);
 
-        $response = $this->actingAs($admin)
-            ->post(route('admin.classrooms.store'), $this->validPayload(['academic_year' => '2025/2026']));
-
-        $response->assertSessionHasErrors('academic_year');
+        $this->actingAs($admin)
+            ->post(route('admin.classrooms.store'), $this->validPayload(['academic_year_id' => $closed->id]))
+            ->assertSessionHasErrors('academic_year_id');
 
         $this->actingAs($admin)
             ->post(route('admin.classrooms.store'), $this->validPayload([
-                'academic_year' => '2030/2031',
+                'academic_year_id' => 999999,
                 'name' => 'Kelas Baru',
             ]))
-            ->assertSessionHasErrors('academic_year');
+            ->assertSessionHasErrors('academic_year_id');
     }
 
     public function test_upcoming_academic_year_is_accepted(): void
@@ -339,7 +356,7 @@ class ClassroomRulesTest extends TestCase
         $this->createAcademicYear('2027/2028', AcademicYear::STATUS_UPCOMING);
 
         $response = $this->actingAs($admin)
-            ->post(route('admin.classrooms.store'), $this->validPayload(['academic_year' => '2027/2028']));
+            ->post(route('admin.classrooms.store'), $this->validPayload(['academic_year_id' => $this->yearId('2027/2028')]));
 
         $response->assertSessionHasNoErrors();
     }
@@ -432,7 +449,7 @@ class ClassroomRulesTest extends TestCase
         $response = $this->actingAs($admin)
             ->post(route('admin.classrooms.store'), $this->validPayload([
                 'name' => 'X MIPA 1',
-                'academic_year' => '2027/2028',
+                'academic_year_id' => $this->yearId('2027/2028'),
                 'homeroom_teacher_id' => $teacher->id,
             ]));
 
@@ -462,8 +479,8 @@ class ClassroomRulesTest extends TestCase
     public function test_promotion_is_rejected_when_target_classroom_exceeds_capacity(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
 
         // Target sudah berisi kapasitas maksimal - 1 siswa.
         for ($i = 0; $i < Classroom::studentCapacity() - 1; $i++) {
@@ -487,8 +504,8 @@ class ClassroomRulesTest extends TestCase
     public function test_promotion_is_allowed_exactly_up_to_capacity(): void
     {
         $admin = $this->createAdmin();
-        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year' => '2026/2027']);
-        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year' => '2027/2028']);
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
 
         for ($i = 0; $i < Classroom::studentCapacity() - 2; $i++) {
             $this->createStudentIn($target, $i);
@@ -554,5 +571,23 @@ class ClassroomRulesTest extends TestCase
             ->assertSee('data-capacity="'.Classroom::studentCapacity().'"', false)
             ->assertSee('data-remaining="'.(Classroom::studentCapacity() - 1).'"', false)
             ->assertSee('Kapasitas maksimal '.Classroom::studentCapacity().' siswa per rombel.');
+    }
+
+    // ── Rule: tahun ajaran rombel tidak boleh diubah ─────────────────────────
+
+    public function test_classroom_academic_year_cannot_be_changed_after_creation(): void
+    {
+        $admin = $this->createAdmin();
+        $this->createAcademicYear('2026/2027', AcademicYear::STATUS_CURRENT);
+        $other = $this->createAcademicYear('2027/2028', AcademicYear::STATUS_UPCOMING);
+        $classroom = $this->createClassroom(['name' => 'X MIPA 1']);
+
+        $response = $this->actingAs($admin)->put(
+            route('admin.classrooms.update', $classroom->id),
+            $this->validPayload(['name' => 'X MIPA 1', 'academic_year_id' => $other->id]),
+        );
+
+        $response->assertSessionHasErrors('academic_year_id');
+        $this->assertSame($this->yearId('2026/2027'), $classroom->fresh()->academic_year_id);
     }
 }

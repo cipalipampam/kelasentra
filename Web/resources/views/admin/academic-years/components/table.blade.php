@@ -37,9 +37,9 @@
                             </span>
                         </td>
                         <td>
-                            @if($academicYear->isActive())
+                            @if($academicYear->isCurrent())
                                 <span class="badge-status badge-present" style="font-size: 0.72rem;">
-                                    <i class="bi bi-check-circle me-1"></i>Aktif
+                                    <i class="bi bi-check-circle me-1"></i>Berjalan
                                 </span>
                             @elseif($academicYear->status === \App\Models\AcademicYear::STATUS_UPCOMING)
                                 <span class="badge-status badge-permission" style="font-size: 0.72rem;">
@@ -47,17 +47,17 @@
                                 </span>
                             @else
                                 <span class="badge bg-light text-secondary border px-2 py-1" style="font-size: 0.72rem;">
-                                    <i class="bi bi-archive me-1"></i>Diarsipkan
+                                    <i class="bi bi-archive me-1"></i>Selesai
                                 </span>
                             @endif
                         </td>
                         <td class="text-end pe-4">
                             <div class="d-flex align-items-center justify-content-end gap-1">
-                                @if(! $academicYear->isActive())
+                                @if(! $academicYear->isCurrent())
                                     <form action="{{ route('admin.academic-years.activate', $academicYear->id) }}" method="POST"
-                                          data-confirm-form="Jadikan {{ $academicYear->name }} sebagai tahun ajaran aktif? Tahun ajaran aktif sebelumnya akan diarsipkan.">
+                                          data-confirm-form="Jadikan {{ $academicYear->name }} sebagai tahun ajaran berjalan? Tahun ajaran berjalan sebelumnya akan ditandai selesai.">
                                         @csrf
-                                        <button type="submit" class="btn-action btn-action-approve" title="Jadikan Tahun Ajaran Aktif">
+                                        <button type="submit" class="btn-action btn-action-approve" title="Jadikan Tahun Ajaran Berjalan">
                                             <i class="bi bi-check2-circle"></i>
                                         </button>
                                     </form>

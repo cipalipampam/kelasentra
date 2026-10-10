@@ -65,26 +65,30 @@
                             </div>
 
                             @php
-                                // Tahun ajaran yang sudah diarsipkan tetap ditampilkan agar
-                                // rombel lama dapat diedit tanpa memaksa pindah tahun ajaran.
-                                $editYears = collect($academicYears);
-                                if ($classroom->academic_year && ! $editYears->contains($classroom->academic_year)) {
-                                    $editYears->push($classroom->academic_year);
-                                }
-                                $editYears = $editYears->unique()->sortDesc()->values();
+                                // Tahun ajaran rombel ikut ditampilkan walau sudah tidak operable,
+                                // meskipun nilainya tidak boleh diubah lagi.
+                                $editYears = $academicYears
+                                    ->concat([$classroom->academicYear])
+                                    ->filter()
+                                    ->unique('id')
+                                    ->sortByDesc('start_year')
+                                    ->values();
                             @endphp
                             <div class="col-md-6">
                                 <label class="form-label text-dark fw-semibold small">
                                     Tahun Ajaran <span class="text-danger">*</span>
                                 </label>
-                                <select name="academic_year" class="form-select" data-academic-year-select required>
-                                    <option value="">— Pilih Tahun Ajaran —</option>
+                                <select class="form-select" data-academic-year-select disabled>
                                     @foreach($editYears as $year)
-                                        <option value="{{ $year }}" {{ old('academic_year', $classroom->academic_year) === $year ? 'selected' : '' }}>
-                                            {{ $year }}{{ in_array($year, $academicYears, true) ? '' : ' (Diarsipkan)' }}
+                                        <option value="{{ $year->id }}"
+                                                data-year-name="{{ $year->name }}"
+                                                @selected((string) $classroom->academic_year_id === (string) $year->id)>
+                                            {{ $year->name }}{{ $year->isOperable() ? '' : ' ('.$year->statusLabel().')' }}
                                         </option>
                                     @endforeach
                                 </select>
+                                <input type="hidden" name="academic_year_id" value="{{ $classroom->academic_year_id }}">
+                                <div class="form-text small text-muted">Tahun ajaran rombel tidak dapat diubah setelah dibuat.</div>
                             </div>
 
                             <div class="col-md-6">
@@ -98,7 +102,7 @@
                                             // Abaikan penugasan rombel ini sendiri agar guru yang sedang
                                             // menjabat tidak ikut ter-disable saat mengedit.
                                             $assignedYears = collect($homeroomAssignments[$teacher->id] ?? [])
-                                                ->reject(fn ($year) => $year === $classroom->academic_year
+                                                ->reject(fn ($yearId) => (int) $yearId === (int) $classroom->academic_year_id
                                                     && (int) $classroom->homeroom_teacher_id === (int) $teacher->id)
                                                 ->values();
                                         @endphp

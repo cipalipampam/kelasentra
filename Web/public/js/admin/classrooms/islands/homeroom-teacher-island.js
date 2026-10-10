@@ -23,6 +23,7 @@ export function initHomeroomTeacherIsland() {
 
             teacherSelect.disabled = false;
             const year = yearSelect.value;
+            const yearLabel = yearSelect.selectedOptions[0]?.dataset.yearName || year;
 
             Array.from(teacherSelect.options).forEach((option) => {
                 if (!option.value) return;
@@ -34,7 +35,7 @@ export function initHomeroomTeacherIsland() {
                 const isTaken = year !== '' && parseAssignedYears(option).includes(year);
                 option.disabled = isTaken;
                 option.textContent = isTaken
-                    ? `${option.dataset.originalLabel} — sudah wali kelas ${year}`
+                    ? `${option.dataset.originalLabel} — sudah wali kelas ${yearLabel}`
                     : option.dataset.originalLabel;
             });
 
