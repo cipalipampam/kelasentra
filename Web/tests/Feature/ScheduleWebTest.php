@@ -15,8 +15,11 @@ class ScheduleWebTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
+
     private User $teacher;
+
     private Classroom $classroom;
+
     private Subject $subject;
 
     protected function setUp(): void
@@ -47,22 +50,13 @@ class ScheduleWebTest extends TestCase
             'level' => '10',
             'major' => 'MIPA',
             'section' => '1',
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
         ]);
     }
 
     public function test_admin_can_view_schedules_index(): void
     {
-        Schedule::create([
-            'classroom_id' => $this->classroom->id,
-            'subject_id' => $this->subject->id,
-            'teacher_id' => $this->teacher->id,
-            'day_of_week' => 1,
-            'start_time' => '07:15:00',
-            'end_time' => '08:45:00',
-            'room' => 'R.101',
-            'is_active' => true,
-        ]);
+        $this->makeSchedule($this->classroom, $this->subject, $this->teacher, 1, '07:15:00', '08:45:00', ['room' => 'R.101']);
 
         $response = $this->actingAs($this->admin)->get(route('admin.schedules.index', [
             'classroom_id' => $this->classroom->id,
@@ -92,27 +86,17 @@ class ScheduleWebTest extends TestCase
         $response->assertRedirect(route('admin.schedules.index', ['classroom_id' => $this->classroom->id]));
         $response->assertSessionHas('success');
 
-        $this->assertDatabaseHas('schedules', [
-            'classroom_id' => $this->classroom->id,
-            'subject_id' => $this->subject->id,
-            'teacher_id' => $this->teacher->id,
-            'day_of_week' => 2,
-            'room' => 'R.102',
-        ]);
+        $schedule = Schedule::firstOrFail();
+        $this->assertSame(2, $schedule->day_of_week);
+        $this->assertSame('R.102', $schedule->room);
+        $this->assertSame($this->classroom->id, $schedule->classroom->id);
+        $this->assertSame($this->subject->id, $schedule->subject->id);
+        $this->assertSame($this->teacher->id, $schedule->teacher->id);
     }
 
     public function test_admin_can_update_schedule(): void
     {
-        $schedule = Schedule::create([
-            'classroom_id' => $this->classroom->id,
-            'subject_id' => $this->subject->id,
-            'teacher_id' => $this->teacher->id,
-            'day_of_week' => 3,
-            'start_time' => '07:15:00',
-            'end_time' => '08:45:00',
-            'room' => 'R.101',
-            'is_active' => true,
-        ]);
+        $schedule = $this->makeSchedule($this->classroom, $this->subject, $this->teacher, 3, '07:15:00', '08:45:00', ['room' => 'R.101']);
 
         $response = $this->actingAs($this->admin)->put(route('admin.schedules.update', $schedule->id), [
             'classroom_id' => $this->classroom->id,
@@ -136,22 +120,15 @@ class ScheduleWebTest extends TestCase
 
     public function test_admin_can_delete_schedule(): void
     {
-        $schedule = Schedule::create([
-            'classroom_id' => $this->classroom->id,
-            'subject_id' => $this->subject->id,
-            'teacher_id' => $this->teacher->id,
-            'day_of_week' => 4,
-            'start_time' => '07:15:00',
-            'end_time' => '08:45:00',
-            'is_active' => true,
-        ]);
+        $schedule = $this->makeSchedule($this->classroom, $this->subject, $this->teacher, 4, '07:15:00', '08:45:00');
 
         $response = $this->actingAs($this->admin)->delete(route('admin.schedules.destroy', $schedule->id));
 
         $response->assertRedirect(route('admin.schedules.index', ['classroom_id' => $this->classroom->id]));
         $response->assertSessionHas('success');
 
-        $this->assertDatabaseMissing('schedules', ['id' => $schedule->id]);
+        // Riwayat jadwal tetap tersimpan: nonaktif, bukan hilang.
+        $this->assertSoftDeleted('schedules', ['id' => $schedule->id]);
     }
 
     public function test_ajax_get_teachers_by_subject_returns_linear_teachers(): void
@@ -168,15 +145,7 @@ class ScheduleWebTest extends TestCase
     public function test_store_schedule_fails_when_clash_occurs(): void
     {
         // Buat jadwal 1: X-MIPA 1, Senin 07:15-08:45
-        Schedule::create([
-            'classroom_id' => $this->classroom->id,
-            'subject_id' => $this->subject->id,
-            'teacher_id' => $this->teacher->id,
-            'day_of_week' => 1,
-            'start_time' => '07:15:00',
-            'end_time' => '08:45:00',
-            'is_active' => true,
-        ]);
+        $this->makeSchedule($this->classroom, $this->subject, $this->teacher, 1, '07:15:00', '08:45:00');
 
         // Coba buat jadwal 2 bertabrakan di kelas lain dengan guru yang sama pada waktu yang sama
         $classroom2 = Classroom::create([
@@ -184,7 +153,7 @@ class ScheduleWebTest extends TestCase
             'level' => '10',
             'major' => 'MIPA',
             'section' => '2',
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
         ]);
 
         $response = $this->actingAs($this->admin)->post(route('admin.schedules.store'), [
@@ -216,4 +185,3 @@ class ScheduleWebTest extends TestCase
         $response->assertSessionHasErrors(['start_time']);
     }
 }
-

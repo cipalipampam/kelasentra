@@ -6,9 +6,10 @@ use App\Models\AppNotification;
 use App\Models\Attendance;
 use App\Models\Classroom;
 use App\Models\Schedule;
-use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
+use App\Services\Shared\Attendance\AttendanceContext;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -17,16 +18,17 @@ class AcademicApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->seed(RoleSeeder::class);
+    }
+
     public function test_student_only_receives_active_schedule_for_own_classroom(): void
     {
         $classroom = $this->classroom();
         $student = User::factory()->create();
-        Student::create([
-            'user_id' => $student->id,
-            'classroom_id' => $classroom->id,
-            'nis' => 'S-001',
-            'academic_status' => 'active',
-        ]);
+        $this->enrollStudent($classroom, 'S-001', 'active', $student);
 
         $ownSchedule = $this->schedule($classroom, 1);
         $this->schedule($this->classroom(), 1);
@@ -47,18 +49,13 @@ class AcademicApiTest extends TestCase
         $teacher = User::factory()->create();
         $schedule = $this->schedule($classroom, 1, $teacher);
         $studentUser = User::factory()->create();
-        $student = Student::create([
-            'user_id' => $studentUser->id,
-            'classroom_id' => $classroom->id,
-            'nis' => 'S-002',
-            'academic_status' => 'active',
-        ]);
-        Attendance::create([
+        $student = $this->enrollStudent($classroom, 'S-002', 'active', $studentUser);
+        Attendance::create(array_merge(AttendanceContext::forUser($studentUser), [
             'user_id' => $studentUser->id,
             'recorded_at' => '2026-09-21 07:00:00',
             'status' => 'permission',
             'is_approved' => true,
-        ]);
+        ]));
 
         Sanctum::actingAs($teacher);
 
@@ -134,7 +131,7 @@ class AcademicApiTest extends TestCase
 
     public function test_teacher_receives_assigned_schedule(): void
     {
-        $this->seed(\Database\Seeders\RoleSeeder::class);
+        $this->seed(RoleSeeder::class);
         $teacher = User::factory()->create();
         $teacher->assignRole('guru');
 
@@ -158,12 +155,7 @@ class AcademicApiTest extends TestCase
         $schedule = $this->schedule($classroom, 1, $teacher);
         $schedule->update(['is_active' => false]);
 
-        $student = Student::create([
-            'user_id' => User::factory()->create()->id,
-            'classroom_id' => $classroom->id,
-            'nis' => 'S-999',
-            'academic_status' => 'active',
-        ]);
+        $student = $this->enrollStudent($classroom, 'S-999');
 
         Sanctum::actingAs($teacher);
 
@@ -186,12 +178,7 @@ class AcademicApiTest extends TestCase
         $teacher = User::factory()->create();
         $schedule = $this->schedule($classroom, 1, $teacher);
 
-        $foreignStudent = Student::create([
-            'user_id' => User::factory()->create()->id,
-            'classroom_id' => $otherClassroom->id,
-            'nis' => 'S-FOREIGN',
-            'academic_status' => 'active',
-        ]);
+        $foreignStudent = $this->enrollStudent($otherClassroom, 'S-FOREIGN');
 
         Sanctum::actingAs($teacher);
 
@@ -205,6 +192,21 @@ class AcademicApiTest extends TestCase
         $this->postJson("/api/v1/schedules/{$schedule->id}/class-attendance", $payload)
             ->assertStatus(422)
             ->assertJsonPath('success', false);
+    }
+
+    public function test_student_profile_payload_keeps_the_grade_field(): void
+    {
+        $classroom = $this->classroom();
+        $studentUser = User::factory()->create();
+        $studentUser->assignRole('siswa');
+        $this->enrollStudent($classroom, 'S-777', 'active', $studentUser);
+
+        Sanctum::actingAs($studentUser);
+
+        $this->getJson('/api/v1/user')
+            ->assertOk()
+            ->assertJsonPath('data.role_name', 'siswa')
+            ->assertJsonPath('data.student.grade', $classroom->name);
     }
 
     public function test_dashboard_includes_unread_notifications_count(): void
@@ -232,13 +234,13 @@ class AcademicApiTest extends TestCase
             'level' => '10',
             'major' => 'MIPA',
             'section' => (string) fake()->unique()->numberBetween(1, 99),
-            'academic_year' => '2026/2027',
+            'academic_year_id' => $this->yearId('2026/2027'),
         ]);
     }
 
     private function schedule(Classroom $classroom, int $dayOfWeek, ?User $teacher = null): Schedule
     {
-        return Schedule::create([
+        return $this->createSchedule([
             'classroom_id' => $classroom->id,
             'subject_id' => Subject::create([
                 'code' => 'MAP-'.fake()->unique()->numberBetween(1, 9999),

@@ -2,6 +2,7 @@
 
 namespace App\Services\Api\Academic;
 
+use App\Models\AcademicYear;
 use App\Models\Schedule;
 use App\Models\User;
 
@@ -12,20 +13,34 @@ class ScheduleService
     {
         $dayOfWeek ??= now()->dayOfWeekIso;
 
+        $academicYear = AcademicYear::currentYear();
+        $classroomId = $user->student?->currentEnrollment?->classroom_id;
+
         if ($user->hasRole('guru') && ($user->employee?->is_teacher ?? true)) {
             $role = 'teacher';
-            $query = Schedule::query()->where('teacher_id', $user->id);
-        } elseif ($user->student?->classroom_id && $user->student->academic_status === 'active') {
+            $query = Schedule::query()
+                ->whereHas('assignment', fn ($assignment) => $assignment->where('teacher_id', $user->getKey()));
+        } elseif ($classroomId !== null && $user->student->academic_status === 'active') {
             $role = 'student';
-            $query = Schedule::query()->where('classroom_id', $user->student->classroom_id);
+            $query = Schedule::query()
+                ->whereHas('assignment', fn ($assignment) => $assignment->where('classroom_id', $classroomId));
         } else {
             return null;
         }
 
         $schedules = $query
             ->where('is_active', true)
+            // Jadwal yang tampil hanya milik tahun ajaran yang sedang berjalan.
+            ->when($academicYear !== null, fn ($base) => $base->whereHas(
+                'assignment.classroom',
+                fn ($classroom) => $classroom->where('academic_year_id', $academicYear->getKey()),
+            ))
             ->where('day_of_week', $dayOfWeek)
-            ->with(['classroom:id,name,level,major,section,academic_year', 'subject:id,code,name,color_code', 'teacher:id,name'])
+            ->with([
+                'assignment.classroom:id,name,level,major,section',
+                'assignment.subject:id,code,name,color_code',
+                'assignment.teacher:id,name',
+            ])
             ->orderBy('start_time')
             ->get()
             ->map(fn (Schedule $schedule) => $this->scheduleData($schedule));

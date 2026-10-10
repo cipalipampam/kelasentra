@@ -6,15 +6,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Schedule extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'classroom_id',
-        'subject_id',
-        'teacher_id',
+        'teaching_assignment_id',
         'day_of_week',
         'start_time',
         'end_time',
@@ -27,19 +26,33 @@ class Schedule extends Model
         'is_active' => 'boolean',
     ];
 
-    public function classroom(): BelongsTo
+    /**
+     * Penugasan yang menjadi konteks jadwal ini. Penugasan yang sudah
+     * di-soft-delete tetap dibaca agar riwayat jadwal tidak kehilangan makna.
+     */
+    public function assignment(): BelongsTo
     {
-        return $this->belongsTo(Classroom::class);
+        return $this->belongsTo(TeachingAssignment::class, 'teaching_assignment_id')->withTrashed();
     }
 
-    public function subject(): BelongsTo
+    public function getClassroomAttribute(): ?Classroom
     {
-        return $this->belongsTo(Subject::class);
+        return $this->assignment?->classroom;
     }
 
-    public function teacher(): BelongsTo
+    public function getClassroomIdAttribute(): ?int
     {
-        return $this->belongsTo(User::class, 'teacher_id');
+        return $this->assignment?->classroom_id;
+    }
+
+    public function getSubjectAttribute(): ?Subject
+    {
+        return $this->assignment?->subject;
+    }
+
+    public function getTeacherAttribute(): ?User
+    {
+        return $this->assignment?->teacher;
     }
 
     public function attendances(): HasMany

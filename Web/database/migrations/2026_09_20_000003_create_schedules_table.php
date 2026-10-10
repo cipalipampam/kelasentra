@@ -8,11 +8,11 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Slot waktu dari sebuah penugasan mengajar. Guru, rombel, mapel, dan
+        // tahun ajaran dibaca lewat teaching_assignment agar tidak ada salinan.
         Schema::create('schedules', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('classroom_id')->constrained('classrooms')->cascadeOnDelete();
-            $table->foreignId('subject_id')->constrained('subjects')->cascadeOnDelete();
-            $table->foreignId('teacher_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('teaching_assignment_id')->constrained('teaching_assignments')->cascadeOnDelete();
             $table->unsignedTinyInteger('day_of_week'); // 1 = Senin, 2 = Selasa, 3 = Rabu, 4 = Kamis, 5 = Jumat, 6 = Sabtu
             $table->time('start_time');
             $table->time('end_time');
@@ -20,8 +20,7 @@ return new class extends Migration
             $table->boolean('is_active')->default(true);
             $table->timestamps();
 
-            $table->index(['classroom_id', 'day_of_week']);
-            $table->index(['teacher_id', 'day_of_week']);
+            $table->index(['teaching_assignment_id', 'day_of_week']);
             $table->index(['day_of_week', 'start_time', 'end_time']);
         });
     }
