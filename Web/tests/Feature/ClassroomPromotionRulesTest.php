@@ -8,6 +8,7 @@ use App\Models\PromotionBatchItem;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Models\User;
+use App\Services\Web\Academic\EnrollmentService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -318,6 +319,10 @@ class ClassroomPromotionRulesTest extends TestCase
         $student->refresh();
         $this->assertSame($target->id, $student->classroom_id);
         $this->assertSame('active', $student->academic_status);
+
+        $item = $batch->items()->where('student_id', $student->id)->firstOrFail();
+        $this->assertSame(PromotionBatchItem::REVERT_STATUS_MISSING_CLASSROOM, $item->revert_status);
+        $this->assertNotNull($item->revert_note);
     }
 
     public function test_promotion_into_an_inactive_classroom_is_rejected(): void
@@ -409,6 +414,12 @@ class ClassroomPromotionRulesTest extends TestCase
             'to_classroom_id' => $target->id,
             'to_academic_status' => 'active',
         ]);
+
+        // Provenance batch wajib tercatat pada enrollment target yang baru dibuka
+        $targetEnrollment = $student->fresh()->currentEnrollment;
+        $this->assertNotNull($targetEnrollment);
+        $this->assertSame($target->id, $targetEnrollment->classroom_id);
+        $this->assertSame($batch->id, $targetEnrollment->promotion_batch_id);
     }
 
     // ── Pembatalan batch ────────────────────────────────────────────────────
@@ -435,6 +446,26 @@ class ClassroomPromotionRulesTest extends TestCase
             $this->assertSame($source->id, $student->classroom_id);
             $this->assertSame($source->name, $student->grade);
             $this->assertSame('active', $student->academic_status);
+
+            // Enrollment sumber dibuka kembali (ended_at null)
+            $sourceEnrollment = StudentEnrollment::where('student_id', $student->id)
+                ->where('classroom_id', $source->id)
+                ->first();
+            $this->assertNotNull($sourceEnrollment);
+            $this->assertNull($sourceEnrollment->ended_at);
+
+            // Enrollment target TIDAK dihapus: ditutup (ended_at terisi) dan tetap mencatat batch ID
+            $targetEnrollment = StudentEnrollment::where('student_id', $student->id)
+                ->where('classroom_id', $target->id)
+                ->first();
+            $this->assertNotNull($targetEnrollment);
+            $this->assertNotNull($targetEnrollment->ended_at);
+            $this->assertSame($batch->id, $targetEnrollment->promotion_batch_id);
+
+            // Item batch mencatat status restored
+            $item = $batch->items()->where('student_id', $student->id)->firstOrFail();
+            $this->assertSame(PromotionBatchItem::REVERT_STATUS_RESTORED, $item->revert_status);
+            $this->assertNull($item->revert_note);
         }
 
         $batch->refresh();
@@ -465,6 +496,13 @@ class ClassroomPromotionRulesTest extends TestCase
 
         $this->assertSame($source->id, $studentA->fresh()->classroom_id);
         $this->assertSame($elsewhere->id, $studentB->fresh()->classroom_id);
+
+        $itemA = $batch->items()->where('student_id', $studentA->id)->firstOrFail();
+        $this->assertSame(PromotionBatchItem::REVERT_STATUS_RESTORED, $itemA->revert_status);
+
+        $itemB = $batch->items()->where('student_id', $studentB->id)->firstOrFail();
+        $this->assertSame(PromotionBatchItem::REVERT_STATUS_SKIPPED, $itemB->revert_status);
+        $this->assertNotNull($itemB->revert_note);
     }
 
     public function test_batch_cannot_be_reverted_twice(): void
@@ -515,5 +553,68 @@ class ClassroomPromotionRulesTest extends TestCase
         $this->assertSame(2, $batch->student_count);
         $this->assertSame(2, PromotionBatchItem::query()->where('promotion_batch_id', $batch->id)->count());
         $this->assertSame(2, $batch->items()->count());
+    }
+
+    public function test_regular_individual_placement_leaves_promotion_batch_id_null(): void
+    {
+        $classroom = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $student = Student::create([
+            'user_id' => User::factory()->create()->id,
+            'nis' => 'S-REG-1',
+            'academic_status' => 'active',
+            'entry_academic_year_id' => $classroom->academic_year_id,
+        ]);
+
+        $enrollment = app(EnrollmentService::class)->place($student, $classroom);
+
+        $this->assertNull($enrollment->promotion_batch_id);
+    }
+
+    public function test_retain_sets_promotion_batch_id_and_can_be_reverted(): void
+    {
+        $admin = $this->createAdmin();
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom([
+            'name' => 'X MIPA 2',
+            'level' => '10',
+            'academic_year_id' => $this->yearId('2027/2028'),
+        ]);
+        $student = $this->createStudentIn($source, 1);
+
+        $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
+
+        $batch = PromotionBatch::query()->latest('id')->firstOrFail();
+        $targetEnrollment = $student->fresh()->currentEnrollment;
+        $this->assertSame($batch->id, $targetEnrollment->promotion_batch_id);
+
+        $this->actingAs($admin)->post(route('admin.classrooms.promotion.revert', $batch->id));
+
+        $this->assertSame($source->id, $student->fresh()->classroom_id);
+
+        $revertedTargetEnrollment = StudentEnrollment::where('student_id', $student->id)
+            ->where('classroom_id', $target->id)
+            ->firstOrFail();
+        $this->assertNotNull($revertedTargetEnrollment->ended_at);
+        $this->assertSame($batch->id, $revertedTargetEnrollment->promotion_batch_id);
+    }
+
+    public function test_revert_records_optional_revert_reason(): void
+    {
+        $admin = $this->createAdmin();
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
+        $student = $this->createStudentIn($source, 1);
+
+        $this->promote($admin, $source, $target, [$student->id])->assertSessionHasNoErrors();
+
+        $batch = PromotionBatch::query()->latest('id')->firstOrFail();
+
+        $this->actingAs($admin)->post(route('admin.classrooms.promotion.revert', $batch->id), [
+            'revert_reason' => 'Salah pilih rombel tujuan pada saat input.',
+        ])->assertSessionHasNoErrors();
+
+        $batch->refresh();
+        $this->assertTrue($batch->isReverted());
+        $this->assertSame('Salah pilih rombel tujuan pada saat input.', $batch->revert_reason);
     }
 }

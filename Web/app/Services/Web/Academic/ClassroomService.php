@@ -339,8 +339,8 @@ class ClassroomService
                 ];
 
                 if ($isPromotion) {
-                    // Menutup enrollment rombel asal dan membuka enrollment rombel tujuan.
-                    $this->enrollments->place($student, $targetClass);
+                    // Menutup enrollment rombel asal dan membuka enrollment rombel tujuan dengan provenance batch.
+                    $this->enrollments->place($student, $targetClass, null, $batch->id);
                 } else {
                     $this->enrollments->closeCurrent($student);
                     $student->update([
@@ -419,17 +419,18 @@ class ClassroomService
         foreach ($sources as $source) {
             if (in_array(strtolower($source->name), $existingNames, true)) {
                 $skipped++;
+
                 continue;
             }
 
             Classroom::create([
-                'name'               => $source->name,
-                'level'              => $source->level,
-                'major'              => $source->major,
-                'section'            => $source->section,
-                'academic_year_id'   => $targetAcademicYearId,
+                'name' => $source->name,
+                'level' => $source->level,
+                'major' => $source->major,
+                'section' => $source->section,
+                'academic_year_id' => $targetAcademicYearId,
                 'homeroom_teacher_id' => null,
-                'is_active'          => true,
+                'is_active' => true,
             ]);
 
             $existingNames[] = strtolower($source->name);
@@ -457,45 +458,67 @@ class ClassroomService
      * Siswa yang datanya sudah berubah lagi setelah batch berjalan dilewati
      * agar pembatalan tidak menimpa perubahan yang lebih baru.
      *
+     * Target enrollment ditutup (ended_at diisi) dengan tetap mempertahankan
+     * promotion_batch_id untuk jejak audit, sedangkan enrollment asal dibuka kembali.
+     *
      * @return array{restored: int, skipped: int, missing_classroom: int}
      */
-    public function revertBatch(PromotionBatch $batch, User $actor): array
+    public function revertBatch(PromotionBatch $batch, User $actor, ?string $reason = null): array
     {
-        if ($batch->isReverted()) {
-            throw ValidationException::withMessages([
-                'promotion_batch' => 'Batch ini sudah pernah dibatalkan sebelumnya.',
-            ]);
-        }
+        return DB::transaction(function () use ($batch, $actor, $reason) {
+            /** @var PromotionBatch $lockedBatch */
+            $lockedBatch = PromotionBatch::query()
+                ->whereKey($batch->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        return DB::transaction(function () use ($batch, $actor) {
-            $batch->load('items.student');
+            if ($lockedBatch->isReverted()) {
+                throw ValidationException::withMessages([
+                    'promotion_batch' => 'Batch ini sudah pernah dibatalkan sebelumnya.',
+                ]);
+            }
+
+            $lockedBatch->load('items.student');
 
             $restored = 0;
             $skipped = 0;
             $missingClassroom = 0;
 
-            foreach ($batch->items as $item) {
+            foreach ($lockedBatch->items as $item) {
                 $student = $item->student;
 
-                // Rombel asal sudah dihapus, sehingga posisi asal tidak dapat
-                // dipulihkan tanpa meninggalkan siswa aktif tanpa rombel.
-                if ($item->from_classroom_id === null) {
+                // Rombel asal sudah dihapus atau tidak aktif sehingga tidak dapat menerima siswa.
+                $fromClassroom = $item->from_classroom_id ? Classroom::find($item->from_classroom_id) : null;
+
+                if ($fromClassroom === null || ! $fromClassroom->is_active) {
+                    $item->update([
+                        'revert_status' => PromotionBatchItem::REVERT_STATUS_MISSING_CLASSROOM,
+                        'revert_note' => 'Rombel asal sudah dihapus atau tidak aktif.',
+                    ]);
                     $missingClassroom++;
 
                     continue;
                 }
 
-                $currentClassroomId = $student?->currentEnrollment()->value('classroom_id');
+                $currentEnrollment = $student?->currentEnrollment()->first();
+                $currentClassroomId = $currentEnrollment?->classroom_id;
 
-                if ($student === null
-                    || (int) $currentClassroomId !== (int) $item->to_classroom_id
-                    || $student->academic_status !== $item->to_academic_status) {
+                $hasChanged = $student === null
+                    || $student->academic_status !== $item->to_academic_status
+                    || ($item->to_classroom_id !== null && (int) $currentClassroomId !== (int) $item->to_classroom_id)
+                    || ($item->to_classroom_id === null && $currentEnrollment !== null);
+
+                if ($hasChanged) {
+                    $item->update([
+                        'revert_status' => PromotionBatchItem::REVERT_STATUS_SKIPPED,
+                        'revert_note' => 'Data siswa atau status penempatan telah berubah sejak batch dijalankan.',
+                    ]);
                     $skipped++;
 
                     continue;
                 }
 
-                // Status identitas dipulihkan lebih dulu agar invariant
+                // 1. Status identitas dipulihkan lebih dulu agar invariant
                 // "enrollment berjalan hanya untuk siswa aktif" tetap terjaga.
                 $student->update([
                     'academic_status' => $item->from_academic_status,
@@ -503,23 +526,30 @@ class ClassroomService
                     'graduation_academic_year_id' => null,
                 ]);
 
-                $fromClassroom = Classroom::find($item->from_classroom_id);
-
-                if ($fromClassroom !== null) {
-                    $this->enrollments->place($student, $fromClassroom);
+                // 2. Pulihkan enrollment sesuai jenis batch
+                if ($lockedBatch->action === PromotionBatch::ACTION_PROMOTE && $item->to_classroom_id !== null) {
+                    $this->enrollments->revertPromotion($student, $fromClassroom, (int) $item->to_classroom_id, $lockedBatch->id);
+                } else {
+                    $this->enrollments->revertGraduation($student, $fromClassroom);
                 }
+
+                // 3. Catat status audit item
+                $item->update([
+                    'revert_status' => PromotionBatchItem::REVERT_STATUS_RESTORED,
+                    'revert_note' => null,
+                ]);
 
                 if ($student->user_id) {
                     AppNotification::create([
                         'user_id' => $student->user_id,
                         'title' => 'Koreksi Data Akademik',
-                        'body' => $batch->action === PromotionBatch::ACTION_PROMOTE
+                        'body' => $lockedBatch->action === PromotionBatch::ACTION_PROMOTE
                             ? "Penempatan rombel Anda dikembalikan ke {$item->from_classroom_name}."
                             : 'Status kelulusan Anda dibatalkan dan dikembalikan ke status sebelumnya.',
                         'type' => 'announcement',
                         'data' => [
                             'action' => 'promotion_reverted',
-                            'promotion_batch_id' => $batch->id,
+                            'promotion_batch_id' => $lockedBatch->id,
                         ],
                         'is_read' => false,
                     ]);
@@ -528,10 +558,11 @@ class ClassroomService
                 $restored++;
             }
 
-            $batch->update([
+            $lockedBatch->update([
                 'reverted_at' => now(),
                 'reverted_by' => $actor->id,
                 'reverted_by_name' => $actor->name,
+                'revert_reason' => $reason,
             ]);
 
             return [

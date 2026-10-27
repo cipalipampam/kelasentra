@@ -14,6 +14,12 @@ class PromotionBatchItem extends Model
 {
     use HasFactory;
 
+    public const REVERT_STATUS_RESTORED = 'restored';
+
+    public const REVERT_STATUS_SKIPPED = 'skipped';
+
+    public const REVERT_STATUS_MISSING_CLASSROOM = 'missing_classroom';
+
     protected $fillable = [
         'promotion_batch_id',
         'student_id',
@@ -25,7 +31,14 @@ class PromotionBatchItem extends Model
         'from_academic_status',
         'to_classroom_id',
         'to_academic_status',
+        'revert_status',
+        'revert_note',
     ];
+
+    public function isRestored(): bool
+    {
+        return $this->revert_status === self::REVERT_STATUS_RESTORED;
+    }
 
     public function batch(): BelongsTo
     {

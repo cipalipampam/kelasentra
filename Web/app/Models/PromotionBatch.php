@@ -32,6 +32,7 @@ class PromotionBatch extends Model
         'reverted_at',
         'reverted_by',
         'reverted_by_name',
+        'revert_reason',
     ];
 
     protected $casts = [
@@ -72,5 +73,4 @@ class PromotionBatch extends Model
     {
         return $this->target_classroom_name ?? 'Alumni / Lulus';
     }
-
 }

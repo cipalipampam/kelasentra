@@ -24,10 +24,15 @@ class EnrollmentService
      * 2. Rombel harus berstatus aktif (spec §4.4).
      * 3. Tahun ajaran rombel harus operable (current atau upcoming) (spec §4.4).
      * 4. Kapasitas rombel tidak boleh terlampaui (row lock).
+     * 5. Provenance batch dicatat bila penempatan berasal dari batch promosi/retain.
      */
-    public function place(Student $student, Classroom $classroom, ?string $startedAt = null): StudentEnrollment
-    {
-        return DB::transaction(function () use ($student, $classroom, $startedAt) {
+    public function place(
+        Student $student,
+        Classroom $classroom,
+        ?string $startedAt = null,
+        ?int $promotionBatchId = null
+    ): StudentEnrollment {
+        return DB::transaction(function () use ($student, $classroom, $startedAt, $promotionBatchId) {
             /** @var Classroom $locked */
             $locked = Classroom::query()
                 ->with('academicYear')
@@ -59,6 +64,10 @@ class EnrollmentService
 
             // Siswa yang sudah berada di rombel ini tidak menempati kursi baru.
             if ($current !== null && (int) $current->classroom_id === (int) $locked->getKey()) {
+                if ($promotionBatchId !== null && $current->promotion_batch_id !== $promotionBatchId) {
+                    $current->update(['promotion_batch_id' => $promotionBatchId]);
+                }
+
                 return $current;
             }
 
@@ -92,6 +101,7 @@ class EnrollmentService
                     'classroom_id' => $locked->getKey(),
                     'started_at' => $existingForYear->started_at ?? $startDate,
                     'ended_at' => null,
+                    'promotion_batch_id' => $promotionBatchId,
                 ]);
 
                 return $existingForYear;
@@ -102,8 +112,76 @@ class EnrollmentService
                 'academic_year_id' => $locked->academic_year_id,
                 'classroom_id' => $locked->getKey(),
                 'started_at' => $startDate,
+                'promotion_batch_id' => $promotionBatchId,
             ]);
         });
+    }
+
+    /**
+     * Membatalkan penempatan promosi: menutup enrollment tujuan (tetap mencatat batch ID)
+     * dan membuka kembali enrollment asal.
+     */
+    public function revertPromotion(
+        Student $student,
+        Classroom $fromClassroom,
+        int $toClassroomId,
+        int $batchId
+    ): void {
+        // 1. Tutup enrollment berjalan di rombel tujuan (tetap mempertahankan promotion_batch_id)
+        StudentEnrollment::query()
+            ->where('student_id', $student->getKey())
+            ->where('classroom_id', $toClassroomId)
+            ->whereNull('ended_at')
+            ->update([
+                'ended_at' => now()->toDateString(),
+            ]);
+
+        // 2. Buka kembali enrollment rombel asal
+        $sourceEnrollment = StudentEnrollment::query()
+            ->where('student_id', $student->getKey())
+            ->where('classroom_id', $fromClassroom->getKey())
+            ->where('academic_year_id', $fromClassroom->academic_year_id)
+            ->first();
+
+        if ($sourceEnrollment !== null) {
+            $sourceEnrollment->update(['ended_at' => null]);
+        } else {
+            StudentEnrollment::create([
+                'student_id' => $student->getKey(),
+                'classroom_id' => $fromClassroom->getKey(),
+                'academic_year_id' => $fromClassroom->academic_year_id,
+                'started_at' => now()->toDateString(),
+                'ended_at' => null,
+            ]);
+        }
+
+        $student->unsetRelation('currentEnrollment');
+    }
+
+    /**
+     * Membatalkan kelulusan: membuka kembali enrollment rombel asal yang sebelumnya ditutup.
+     */
+    public function revertGraduation(Student $student, Classroom $fromClassroom): void
+    {
+        $sourceEnrollment = StudentEnrollment::query()
+            ->where('student_id', $student->getKey())
+            ->where('classroom_id', $fromClassroom->getKey())
+            ->where('academic_year_id', $fromClassroom->academic_year_id)
+            ->first();
+
+        if ($sourceEnrollment !== null) {
+            $sourceEnrollment->update(['ended_at' => null]);
+        } else {
+            StudentEnrollment::create([
+                'student_id' => $student->getKey(),
+                'classroom_id' => $fromClassroom->getKey(),
+                'academic_year_id' => $fromClassroom->academic_year_id,
+                'started_at' => now()->toDateString(),
+                'ended_at' => null,
+            ]);
+        }
+
+        $student->unsetRelation('currentEnrollment');
     }
 
     /**

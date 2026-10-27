@@ -42,8 +42,8 @@ class ClassroomController extends Controller
         $studentCapacity = Classroom::studentCapacity();
 
         $stats = [
-            'total'    => Classroom::count(),
-            'active'   => Classroom::where('is_active', true)->count(),
+            'total' => Classroom::count(),
+            'active' => Classroom::where('is_active', true)->count(),
             'inactive' => Classroom::where('is_active', false)->count(),
         ];
 
@@ -161,7 +161,15 @@ class ClassroomController extends Controller
      */
     public function revertPromotion(Request $request, PromotionBatch $promotionBatch): RedirectResponse
     {
-        $result = $this->classroomService->revertBatch($promotionBatch, $request->user());
+        $validated = $request->validate([
+            'revert_reason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $result = $this->classroomService->revertBatch(
+            $promotionBatch,
+            $request->user(),
+            $validated['revert_reason'] ?? null
+        );
 
         $message = "Batch {$promotionBatch->actionLabel()} dari {$promotionBatch->source_classroom_name} dibatalkan: {$result['restored']} siswa dikembalikan.";
 
@@ -185,13 +193,13 @@ class ClassroomController extends Controller
         $request->validate([
             'source_academic_year_id' => ['required', 'integer', 'exists:academic_years,id'],
             'target_academic_year_id' => ['required', 'integer', 'exists:academic_years,id', 'different:source_academic_year_id'],
-            'classroom_ids'           => ['required', 'array', 'min:1'],
-            'classroom_ids.*'         => ['integer', 'exists:classrooms,id'],
+            'classroom_ids' => ['required', 'array', 'min:1'],
+            'classroom_ids.*' => ['integer', 'exists:classrooms,id'],
         ], [
             'source_academic_year_id.required' => 'Tahun ajaran sumber wajib dipilih.',
             'target_academic_year_id.required' => 'Tahun ajaran tujuan wajib dipilih.',
             'target_academic_year_id.different' => 'Tahun ajaran tujuan harus berbeda dari sumber.',
-            'classroom_ids.required'           => 'Pilih minimal satu rombel untuk diduplikasi.',
+            'classroom_ids.required' => 'Pilih minimal satu rombel untuk diduplikasi.',
         ]);
 
         $result = $this->classroomService->duplicateClassroomsFromYear(
