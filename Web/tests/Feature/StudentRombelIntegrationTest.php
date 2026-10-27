@@ -10,9 +10,12 @@ use App\Models\User;
 use App\Rules\EnrollableClassroom;
 use App\Services\Shared\Attendance\AttendanceContext;
 use App\Services\Web\Academic\ClassroomService;
+use App\Services\Web\Academic\EnrollmentService;
+use App\Services\Web\Student\StudentService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 /**
@@ -403,5 +406,165 @@ class StudentRombelIntegrationTest extends TestCase
         ]));
 
         $response->assertSessionHasErrors('classroom_id');
+    }
+
+    public function test_enrollment_service_rejects_placing_non_active_student(): void
+    {
+        $classroom = $this->createClassroom();
+        $student = $this->createStudent($classroom, ['academic_status' => 'transferred']);
+
+        $this->expectException(ValidationException::class);
+        app(EnrollmentService::class)->place($student, $classroom);
+    }
+
+    public function test_enrollment_service_rejects_placing_into_inactive_classroom(): void
+    {
+        $activeClassroom = $this->createClassroom();
+        $student = $this->createStudent($activeClassroom);
+        $inactiveClassroom = $this->createClassroom(['name' => 'XI MIPA 2', 'section' => '2', 'is_active' => false]);
+
+        $this->expectException(ValidationException::class);
+        app(EnrollmentService::class)->place($student, $inactiveClassroom);
+    }
+
+    public function test_enrollment_service_rejects_placing_into_closed_academic_year(): void
+    {
+        $activeClassroom = $this->createClassroom();
+        $student = $this->createStudent($activeClassroom);
+
+        $closedYearId = AcademicYear::create([
+            'name' => '2024/2025',
+            'status' => AcademicYear::STATUS_CLOSED,
+        ])->id;
+
+        $closedClassroom = Classroom::create([
+            'name' => 'X MIPA 1',
+            'level' => '10',
+            'major' => 'MIPA',
+            'section' => '1',
+            'academic_year_id' => $closedYearId,
+            'is_active' => true,
+        ]);
+
+        $this->expectException(ValidationException::class);
+        app(EnrollmentService::class)->place($student, $closedClassroom);
+    }
+
+    public function test_close_current_is_idempotent(): void
+    {
+        $classroom = $this->createClassroom();
+        $student = $this->createStudent($classroom);
+        $enrollmentService = app(EnrollmentService::class);
+
+        $enrollmentService->closeCurrent($student);
+        $this->assertNull($student->fresh()->currentEnrollment);
+
+        // Memanggil ulang tidak menimbulkan error dan tetap null
+        $enrollmentService->closeCurrent($student);
+        $this->assertNull($student->fresh()->currentEnrollment);
+    }
+
+    public function test_updating_student_to_transferred_prohibits_classroom_id(): void
+    {
+        $admin = $this->createAdmin();
+        $classroom = $this->createClassroom();
+        $student = $this->createStudent($classroom);
+
+        $response = $this->actingAs($admin)->put(route('admin.students.update', $student->user_id), $this->payload([
+            'name' => $student->user->name,
+            'email' => $student->user->email,
+            'academic_status' => 'transferred',
+            'classroom_id' => $classroom->id,
+        ]));
+
+        $response->assertSessionHasErrors('classroom_id');
+    }
+
+    public function test_updating_student_to_graduated_is_prohibited_via_form(): void
+    {
+        $admin = $this->createAdmin();
+        $classroom = $this->createClassroom();
+        $student = $this->createStudent($classroom);
+
+        $response = $this->actingAs($admin)->put(route('admin.students.update', $student->user_id), $this->payload([
+            'name' => $student->user->name,
+            'email' => $student->user->email,
+            'academic_status' => 'graduated',
+        ]));
+
+        $response->assertSessionHasErrors('academic_status');
+    }
+
+    public function test_create_student_is_atomic_on_placement_failure(): void
+    {
+        $classroom = $this->createClassroom();
+        $this->fillClassroom($classroom, Classroom::studentCapacity());
+
+        $initialUsers = User::count();
+        $initialStudents = Student::count();
+
+        $studentService = app(StudentService::class);
+
+        try {
+            $studentService->createStudent([
+                'name' => 'Siswa Gagal',
+                'email' => 'gagal@sekolah.test',
+                'password' => 'secret123',
+                'classroom_id' => $classroom->id,
+            ]);
+            $this->fail('Harus gagal karena rombel penuh.');
+        } catch (ValidationException $e) {
+            $this->assertSame($initialUsers, User::count());
+            $this->assertSame($initialStudents, Student::count());
+        }
+    }
+
+    public function test_update_student_is_atomic_on_placement_failure(): void
+    {
+        $classroomA = $this->createClassroom(['name' => 'XI MIPA 1', 'section' => '1']);
+        $classroomB = $this->createClassroom(['name' => 'XI MIPA 2', 'section' => '2']);
+        $this->fillClassroom($classroomB, Classroom::studentCapacity());
+
+        $student = $this->createStudent($classroomA, [
+            'nis' => 'S-ORIGINAL',
+        ]);
+        $user = $student->user;
+        $originalName = $user->name;
+        $originalEmail = $user->email;
+
+        $studentService = app(StudentService::class);
+
+        try {
+            $studentService->updateStudent($user, [
+                'name' => 'Nama Berubah',
+                'email' => 'berubah@sekolah.test',
+                'classroom_id' => $classroomB->id,
+            ]);
+            $this->fail('Harus gagal karena rombel tujuan penuh.');
+        } catch (ValidationException $e) {
+            $user->refresh();
+            $this->assertSame($originalName, $user->name);
+            $this->assertSame($originalEmail, $user->email);
+            $this->assertSame($classroomA->id, $student->fresh()->currentEnrollment->classroom_id);
+        }
+    }
+
+    public function test_updating_student_to_transferred_never_leaves_open_enrollment(): void
+    {
+        $classroom = $this->createClassroom();
+        $student = $this->createStudent($classroom);
+        $user = $student->user;
+
+        $studentService = app(StudentService::class);
+        $studentService->updateStudent($user, [
+            'name' => $user->name,
+            'email' => $user->email,
+            'academic_status' => 'transferred',
+            'classroom_id' => $classroom->id,
+        ]);
+
+        $fresh = $student->fresh();
+        $this->assertSame('transferred', $fresh->academic_status);
+        $this->assertNull($fresh->currentEnrollment);
     }
 }

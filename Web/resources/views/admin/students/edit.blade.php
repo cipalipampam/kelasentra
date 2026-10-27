@@ -272,6 +272,10 @@ function previewStudentPhoto(input) {
     const sync = () => {
         const required = statusSelect.value === 'active';
         classroomSelect.required = required;
+        classroomSelect.disabled = !required;
+        if (!required) {
+            classroomSelect.value = '';
+        }
 
         if (requiredMark) {
             requiredMark.style.display = required ? '' : 'none';

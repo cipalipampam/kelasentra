@@ -19,11 +19,18 @@ class UpdateStudentRequest extends FormRequest
         $userId = $this->route('student');
         $user = User::with('student')->findOrFail($userId);
         $studentId = $user->student ? $user->student->id : null;
+        $currentStatus = $user->student?->academic_status ?? 'active';
 
         // Rombel wajib hanya bila siswa berstatus aktif (termasuk bila status
         // baru yang diminta adalah aktif). Status non-aktif menutup enrollment.
-        $requestedStatus = $this->input('academic_status', $user->student?->academic_status ?? 'active');
+        $requestedStatus = $this->input('academic_status', $currentStatus);
         $isActiveStudent = $requestedStatus === 'active';
+
+        // Kelulusan hanya melalui batch kelulusan dari rombel XII (spec D5 & Invariant 6).
+        // Form edit siswa tidak boleh mengubah status siswa menjadi 'graduated'.
+        $allowedStatuses = $currentStatus === 'graduated'
+            ? ['graduated', 'active', 'transferred', 'dropped']
+            : ['active', 'transferred', 'dropped'];
 
         return [
             'name' => 'required|string|max:255',
@@ -32,13 +39,15 @@ class UpdateStudentRequest extends FormRequest
             'password' => 'nullable|min:6',
             'nis' => ['nullable', Rule::unique('students', 'nis')->ignore($studentId)->whereNull('deleted_at')],
             'nisn' => ['nullable', Rule::unique('students', 'nisn')->ignore($studentId)->whereNull('deleted_at')],
-            'classroom_id' => [
-                $isActiveStudent ? 'required' : 'nullable',
-                'integer',
-                'exists:classrooms,id',
-                new EnrollableClassroom($studentId),
-            ],
-            'academic_status' => ['nullable', Rule::in(['active', 'transferred', 'dropped'])],
+            'classroom_id' => $isActiveStudent
+                ? [
+                    'required',
+                    'integer',
+                    'exists:classrooms,id',
+                    new EnrollableClassroom($studentId),
+                ]
+                : ['prohibited'],
+            'academic_status' => ['nullable', Rule::in($allowedStatuses)],
             'gender' => 'nullable|in:male,female',
             'place_of_birth' => 'nullable|string|max:100',
             'date_of_birth' => 'nullable|date',
@@ -60,6 +69,7 @@ class UpdateStudentRequest extends FormRequest
             'nisn.unique' => 'NISN ini sudah terdaftar untuk siswa lain.',
             'classroom_id.required' => 'Rombel wajib dipilih agar siswa langsung punya kelas.',
             'classroom_id.exists' => 'Rombel yang dipilih tidak valid.',
+            'classroom_id.prohibited' => 'Rombel tidak boleh dipilih untuk siswa dengan status non-aktif (pindah/keluar/alumni).',
             'academic_status.in' => 'Status akademik yang dipilih tidak valid. Kelulusan hanya lewat proses kelulusan.',
             'profile_picture.image' => 'Foto profil harus berupa file gambar.',
             'profile_picture.max' => 'Ukuran foto profil maksimal 2MB.',

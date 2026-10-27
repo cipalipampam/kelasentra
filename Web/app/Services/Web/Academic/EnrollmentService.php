@@ -19,14 +19,39 @@ class EnrollmentService
     /**
      * Menempatkan siswa pada sebuah rombel.
      *
-     * Kapasitas rombel dikunci dengan row lock agar dua pendaftaran bersamaan
-     * tidak melewati batas. Enrollment berjalan sebelumnya ditutup, bukan dihapus.
+     * Invariant ditegakkan di sini sebagai boundary penulis tunggal:
+     * 1. Siswa harus berstatus akademik aktif (spec §4.3).
+     * 2. Rombel harus berstatus aktif (spec §4.4).
+     * 3. Tahun ajaran rombel harus operable (current atau upcoming) (spec §4.4).
+     * 4. Kapasitas rombel tidak boleh terlampaui (row lock).
      */
     public function place(Student $student, Classroom $classroom, ?string $startedAt = null): StudentEnrollment
     {
         return DB::transaction(function () use ($student, $classroom, $startedAt) {
             /** @var Classroom $locked */
-            $locked = Classroom::query()->whereKey($classroom->getKey())->lockForUpdate()->firstOrFail();
+            $locked = Classroom::query()
+                ->with('academicYear')
+                ->whereKey($classroom->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $student->isActive()) {
+                throw ValidationException::withMessages([
+                    'academic_status' => "Siswa {$student->nis} berstatus '{$student->academic_status}', hanya siswa aktif yang dapat memiliki enrollment.",
+                ]);
+            }
+
+            if (! $locked->is_active) {
+                throw ValidationException::withMessages([
+                    'classroom_id' => "Rombel {$locked->name} tidak aktif sehingga tidak dapat menerima siswa.",
+                ]);
+            }
+
+            if (! $locked->academicYear?->isOperable()) {
+                throw ValidationException::withMessages([
+                    'classroom_id' => "Tahun ajaran rombel {$locked->name} sudah selesai sehingga tidak dapat menerima siswa.",
+                ]);
+            }
 
             $startDate = $startedAt ?? now()->toDateString();
 
@@ -84,11 +109,17 @@ class EnrollmentService
     /**
      * Menutup enrollment berjalan tanpa membuat pengganti.
      * Dipakai untuk siswa pindah, keluar, atau lulus.
+     * Operasi bersifat idempoten.
      */
     public function closeCurrent(Student $student, ?string $endedAt = null): void
     {
-        $student->currentEnrollment()->first()?->update([
-            'ended_at' => $endedAt ?? now()->toDateString(),
-        ]);
+        StudentEnrollment::query()
+            ->where('student_id', $student->getKey())
+            ->whereNull('ended_at')
+            ->update([
+                'ended_at' => $endedAt ?? now()->toDateString(),
+            ]);
+
+        $student->unsetRelation('currentEnrollment');
     }
 }
