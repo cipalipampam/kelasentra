@@ -30,6 +30,10 @@ class Student extends Model
         'graduated_at',
     ];
 
+    protected $attributes = [
+        'academic_status' => 'active',
+    ];
+
     protected $casts = [
         'graduated_at' => 'datetime',
     ];

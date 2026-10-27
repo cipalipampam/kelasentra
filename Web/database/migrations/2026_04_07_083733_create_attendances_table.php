@@ -19,6 +19,7 @@ return new class extends Migration
             $table->foreignId('academic_year_id')->constrained('academic_years');
             $table->foreignId('classroom_id')->nullable()->constrained('classrooms');
             $table->datetime('recorded_at');
+            $table->date('attendance_date')->nullable();
             $table->datetime('check_out_time')->nullable();
             $table->decimal('latitude', 10, 7)->nullable();
             $table->decimal('longitude', 10, 7)->nullable();
@@ -28,6 +29,11 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->string('proof_image')->nullable();
             $table->timestamps();
+
+            $table->unique(['user_id', 'attendance_date'], 'attendances_user_date_unique');
+            $table->index(['user_id', 'recorded_at'], 'attendances_user_recorded_at_index');
+            $table->index(['recorded_at', 'status'], 'attendances_recorded_at_status_index');
+            $table->index(['is_approved', 'status'], 'attendances_approval_status_index');
         });
     }
 

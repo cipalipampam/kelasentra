@@ -24,6 +24,7 @@ return new class extends Migration
             $table->timestamp('reverted_at')->nullable();
             $table->foreignId('reverted_by')->nullable()->constrained('users')->nullOnDelete();
             $table->string('reverted_by_name', 100)->nullable();
+            $table->string('revert_reason')->nullable();
             $table->timestamps();
 
             $table->index('created_at');
@@ -41,6 +42,8 @@ return new class extends Migration
             $table->string('from_academic_status', 30);
             $table->foreignId('to_classroom_id')->nullable()->constrained('classrooms')->nullOnDelete();
             $table->string('to_academic_status', 30);
+            $table->string('revert_status', 30)->nullable();
+            $table->string('revert_note', 255)->nullable();
             $table->timestamps();
 
             $table->index('student_id');

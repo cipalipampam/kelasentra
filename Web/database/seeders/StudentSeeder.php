@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\Student;
+use App\Models\StudentEnrollment;
 use App\Models\User;
 use App\Services\Web\Academic\EnrollmentService;
 use Illuminate\Database\Seeder;
@@ -73,7 +74,12 @@ class StudentSeeder extends Seeder
 
             for ($i = 0; $i < $cohort['count']; $i++) {
                 $student = $this->createStudent($entryYear, $passwordHash);
-                $enrollments->place($student, $classroom, $this->yearStartDate($classroom));
+                StudentEnrollment::create([
+                    'student_id' => $student->getKey(),
+                    'academic_year_id' => $classroom->academic_year_id,
+                    'classroom_id' => $classroom->getKey(),
+                    'started_at' => $this->yearStartDate($classroom),
+                ]);
             }
         }
 
@@ -136,6 +142,7 @@ class StudentSeeder extends Seeder
             'religion' => DemoData::religion($index),
             'address' => DemoData::address($index),
             'phone_number' => DemoData::phoneNumber($index),
+            'academic_status' => 'active',
         ]);
     }
 

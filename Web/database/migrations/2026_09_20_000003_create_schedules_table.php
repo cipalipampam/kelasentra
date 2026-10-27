@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('room', 50)->nullable(); // Contoh: "Lab Komputer 1", "R.204"
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['teaching_assignment_id', 'day_of_week']);
             $table->index(['day_of_week', 'start_time', 'end_time']);
@@ -30,4 +31,3 @@ return new class extends Migration
         Schema::dropIfExists('schedules');
     }
 };
-

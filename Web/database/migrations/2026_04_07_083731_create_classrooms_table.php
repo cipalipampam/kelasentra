@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -25,19 +26,19 @@ return new class extends Migration
             $table->index('homeroom_teacher_id');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
+            $table->softDeletes();
 
             $table->index(['level', 'major', 'academic_year_id']);
-
-            // Nama rombel unik per tahun ajaran.
-            $table->unique(['name', 'academic_year_id'], 'classrooms_name_academic_year_unique');
-
-            // Satu nomor sesi hanya boleh dipakai sekali per tingkat + jurusan + tahun ajaran,
-            // agar penomoran sesi otomatis tetap dapat diandalkan.
-            $table->unique(['level', 'major', 'section', 'academic_year_id'], 'classrooms_session_unique');
 
             // Satu guru hanya boleh menjadi wali kelas pada satu rombel per tahun ajaran.
             $table->unique(['homeroom_teacher_id', 'academic_year_id'], 'classrooms_homeroom_academic_year_unique');
         });
+
+        // Nama rombel unik per tahun ajaran untuk rombel aktif.
+        DB::statement('CREATE UNIQUE INDEX classrooms_active_name ON classrooms (academic_year_id, (CASE WHEN deleted_at IS NULL THEN name ELSE NULL END))');
+
+        // Satu nomor sesi hanya boleh dipakai sekali per tingkat + jurusan + tahun ajaran pada baris aktif.
+        DB::statement('CREATE UNIQUE INDEX classrooms_active_session ON classrooms (level, section, academic_year_id, (CASE WHEN deleted_at IS NULL THEN major ELSE NULL END))');
     }
 
     public function down(): void
