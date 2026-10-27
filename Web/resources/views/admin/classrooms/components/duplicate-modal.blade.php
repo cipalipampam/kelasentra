@@ -21,7 +21,7 @@
                 <div class="modal-body py-3 px-4">
                     {{-- Info --}}
                     <div class="alert alert-info border-0 py-2 px-3 mb-3 d-flex gap-2 align-items-start" style="font-size: 0.82rem; background: #eff6ff;">
-                        <i class="bi bi-info-circle-fill text-primary mt-1 flex-shrink-0"></i>
+                        <i class="bi bi-info-circle-fill text-primary mt-1 shrink-0"></i>
                         <span>Hanya struktur rombel (nama, tingkat, jurusan, nomor sesi) yang disalin. <strong>Wali kelas dan data siswa tidak ikut</strong> — penetapan wali kelas dilakukan manual setelah duplikasi.</span>
                     </div>
 
@@ -129,3 +129,4 @@
         </div>
     </div>
 </div>
+

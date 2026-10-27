@@ -47,7 +47,9 @@ class _HistoryScreenState extends State<HistoryScreen>
   }
 
   /// Returns badge semantic color, bg color, and label based on attendance status logic
-  ({Color color, Color bgColor, String label}) _resolveBadge(attendance) {
+  ({Color color, Color bgColor, String label}) _resolveBadge(
+    AttendanceModel attendance,
+  ) {
     if (attendance.status == 'present') {
       if (attendance.isLate) {
         return (

@@ -301,7 +301,7 @@ class _ClassAttendanceScreenState extends State<ClassAttendanceScreen> {
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
                         itemCount: students.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final student = students[index];
                           return _buildStudentCard(student, provider);

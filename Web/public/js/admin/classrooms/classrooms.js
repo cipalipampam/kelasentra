@@ -6,12 +6,14 @@ import { initClassroomNamingAssistant } from './islands/naming-assistant-island.
 import { initMajorRequirementIsland } from './islands/major-requirement-island.js';
 import { initHomeroomTeacherIsland } from './islands/homeroom-teacher-island.js';
 import { initSectionSuggestionIsland } from './islands/section-suggestion-island.js';
+import { initDuplicateModalIsland } from './islands/duplicate-modal-island.js';
 
 function bootstrapClassrooms() {
     initClassroomNamingAssistant();
     initMajorRequirementIsland();
     initHomeroomTeacherIsland();
     initSectionSuggestionIsland();
+    initDuplicateModalIsland();
 }
 
 if (document.readyState === 'loading') {

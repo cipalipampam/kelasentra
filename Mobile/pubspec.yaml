@@ -30,20 +30,20 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: ^0.13.6
-  geolocator: ^9.0.2
-  flutter_map: ^4.0.0
-  latlong2: ^0.8.2
-  image_picker: ^1.0.4
-  intl: ^0.20.2
+  http: ^1.6.0
+  geolocator: ^14.1.2
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+  image_picker: ^1.2.4
+  intl: ^0.20.3
   flutter_animate: ^4.5.0
-  fl_chart: ^0.66.2
-  cached_network_image: ^3.2.3
-  shared_preferences: ^2.2.2
-  flutter_secure_storage: ^11.1.1
+  fl_chart: ^1.3.0
+  cached_network_image: ^3.4.1
+  shared_preferences: ^2.5.6
+  flutter_secure_storage: ^11.2.0
   provider: ^6.1.1
-  dio: ^5.4.0
-  dart_pusher_channels: ^1.1.1
+  dio: ^5.11.1
+  dart_pusher_channels: ^1.3.1
 
 dev_dependencies:
   flutter_test:
@@ -54,10 +54,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
-
-dependency_overrides:
-  pinenacl: ^0.6.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

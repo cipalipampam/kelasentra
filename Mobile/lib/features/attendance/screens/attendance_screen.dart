@@ -72,7 +72,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       }
 
       Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
 
       if (!mounted) return;
@@ -301,10 +303,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                               borderRadius: BorderRadius.circular(16),
                               child: FlutterMap(
                                 options: MapOptions(
-                                  center: provider.officeLat != null 
+                                  initialCenter: provider.officeLat != null
                                     ? latlong.LatLng(provider.officeLat!, provider.officeLng!) 
                                     : latlong.LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-                                  zoom: 16.0,
+                                  initialZoom: 16.0,
                                 ),
                                 children: [
                                   TileLayer(
@@ -333,7 +335,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                         ),
                                         width: 44,
                                         height: 44,
-                                        builder: (ctx) => Container(
+                                        child: Container(
                                           decoration: BoxDecoration(
                                             color: AppConstants.colorAbsent,
                                             shape: BoxShape.circle,
@@ -357,7 +359,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                           point: latlong.LatLng(provider.officeLat!, provider.officeLng!),
                                           width: 44,
                                           height: 44,
-                                          builder: (ctx) => Container(
+                                          child: Container(
                                             decoration: BoxDecoration(
                                               color: AppConstants.colorPrimaryBase,
                                               shape: BoxShape.circle,
