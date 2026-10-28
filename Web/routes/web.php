@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\Web\Academic\AcademicYearController;
+use App\Http\Controllers\Web\Academic\ClassroomController;
+use App\Http\Controllers\Web\Academic\ScheduleController;
+use App\Http\Controllers\Web\Academic\SubjectController;
 use App\Http\Controllers\Web\AnnouncementController;
 use App\Http\Controllers\Web\Attendance\AdminAttendanceController;
 use App\Http\Controllers\Web\Auth\AuthController;
@@ -84,14 +87,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
         Route::delete('/{academicYear}', 'destroy')->name('destroy');
     });
 
-    Route::get('classrooms/promotion', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'promotion'])->name('classrooms.promotion');
-    Route::post('classrooms/promotion/preview', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'previewPromotion'])->name('classrooms.promotion.preview');
-    Route::post('classrooms/promotion', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'processPromotion'])->name('classrooms.promotion.process');
-    Route::post('classrooms/promotion/{promotionBatch}/revert', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'revertPromotion'])->name('classrooms.promotion.revert');
-    Route::post('classrooms/duplicate', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'duplicateClassrooms'])->name('classrooms.duplicate');
-    Route::get('classrooms/{classroom}/students', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'getStudents'])->name('classrooms.students');
-    Route::resource('classrooms', \App\Http\Controllers\Web\Academic\ClassroomController::class)->except(['show', 'create', 'edit']);
-    Route::resource('subjects', \App\Http\Controllers\Web\Academic\SubjectController::class)->except(['show', 'create', 'edit']);
-    Route::get('schedules/teachers-by-subject/{subject}', [\App\Http\Controllers\Web\Academic\ScheduleController::class, 'getTeachersBySubject'])->name('schedules.teachers-by-subject');
-    Route::resource('schedules', \App\Http\Controllers\Web\Academic\ScheduleController::class)->except(['show', 'create', 'edit']);
+    Route::get('classrooms/promotion', [ClassroomController::class, 'promotion'])->name('classrooms.promotion');
+    Route::post('classrooms/promotion/preview', [ClassroomController::class, 'previewPromotion'])->name('classrooms.promotion.preview');
+    Route::post('classrooms/promotion', [ClassroomController::class, 'processPromotion'])->name('classrooms.promotion.process');
+    Route::post('classrooms/promotion/{promotionBatch}/revert', [ClassroomController::class, 'revertPromotion'])->name('classrooms.promotion.revert');
+    Route::post('classrooms/duplicate', [ClassroomController::class, 'duplicateClassrooms'])->name('classrooms.duplicate');
+    Route::get('classrooms/{classroom}/students', [ClassroomController::class, 'getStudents'])->name('classrooms.students');
+    Route::resource('classrooms', ClassroomController::class)->except(['show', 'create', 'edit']);
+    Route::resource('subjects', SubjectController::class)->except(['show', 'create', 'edit']);
+    Route::get('schedules/teachers-by-subject/{subject}', [ScheduleController::class, 'getTeachersBySubject'])->name('schedules.teachers-by-subject');
+    Route::resource('schedules', ScheduleController::class)->except(['show', 'create', 'edit']);
 });
