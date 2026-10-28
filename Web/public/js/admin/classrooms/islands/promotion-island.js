@@ -35,6 +35,16 @@ export function initPromotionIsland() {
     const modalActionType = document.getElementById('modalActionType');
     const modalTargetClass = document.getElementById('modalTargetClass');
     const modalStudentCount = document.getElementById('modalStudentCount');
+    const modalPreviewLoading = document.getElementById('modalPreviewLoading');
+    const modalPreviewContent = document.getElementById('modalPreviewContent');
+    const modalErrorAlert = document.getElementById('modalErrorAlert');
+    const modalErrorMessage = document.getElementById('modalErrorMessage');
+    const modalWarningAlert = document.getElementById('modalWarningAlert');
+    const modalWarningMessage = document.getElementById('modalWarningMessage');
+    const modalCapacityRow = document.getElementById('modalCapacityRow');
+    const modalTargetCapacity = document.getElementById('modalTargetCapacity');
+    const btnSubmitFinal = document.getElementById('btnSubmitFinal');
+    const promotionForm = document.getElementById('promotionForm');
 
     if (!sourceClassSelect || !actionPromote || !actionGraduate) return;
 
@@ -455,20 +465,127 @@ export function initPromotionIsland() {
         btnOpenConfirmModal.disabled = !isValid;
     }
 
-    // ── Modal konfirmasi ────────────────────────────────────────────────────
+    // ── Modal konfirmasi & verifikasi preview ───────────────────────────────
     if (btnOpenConfirmModal && modalEl) {
-        btnOpenConfirmModal.addEventListener('click', function () {
+        btnOpenConfirmModal.addEventListener('click', async function () {
             const source = selectedSource();
             const graduating = isGraduating();
             const target = selectedTarget();
+            const studentIds = Array.from(document.querySelectorAll('.student-checkbox:checked'))
+                .map(cb => Number(cb.value));
 
+            // Isi nilai awal cepat dari state form
             if (modalSourceClass) modalSourceClass.textContent = source ? source.text : '-';
             if (modalActionType) modalActionType.textContent = graduating ? 'Kelulusan Siswa (Alumni)' : 'Kenaikan Kelas Baru';
             if (modalTargetClass) modalTargetClass.textContent = graduating ? 'Alumni (Status: Graduated)' : (target ? target.text : '-');
-            if (modalStudentCount) modalStudentCount.textContent = `${checkedCount()} Siswa`;
+            if (modalStudentCount) modalStudentCount.textContent = `${studentIds.length} Siswa Terpilih`;
 
+            if (modalCapacityRow) modalCapacityRow.classList.add('d-none');
+            if (modalErrorAlert) modalErrorAlert.classList.add('d-none');
+            if (modalWarningAlert) modalWarningAlert.classList.add('d-none');
+
+            // Buka modal
             if (window.bootstrap?.Modal) {
                 window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            }
+
+            // Jalankan preview server-side untuk memastikan data belum basi
+            const previewUrl = promotionForm?.dataset?.previewUrl || '/admin/classrooms/promotion/preview';
+            const csrfToken = promotionForm?.querySelector('input[name="_token"]')?.value
+                || document.querySelector('meta[name="csrf-token"]')?.content;
+
+            if (modalPreviewLoading) modalPreviewLoading.classList.remove('d-none');
+            if (modalPreviewContent) modalPreviewContent.classList.add('d-none');
+            if (btnSubmitFinal) btnSubmitFinal.disabled = true;
+
+            try {
+                const response = await fetch(previewUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        action: graduating ? 'graduate' : 'promote',
+                        source_classroom_id: source ? Number(source.value) : null,
+                        target_classroom_id: (graduating || !target) ? null : Number(target.value),
+                        student_ids: studentIds,
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Gagal memverifikasi data (HTTP ${response.status})`);
+                }
+
+                const data = await response.json();
+
+                // Perbarui detail berdasarkan verifikasi server
+                if (modalSourceClass && data.source_classroom) {
+                    modalSourceClass.textContent = `${data.source_classroom.name} (${data.source_classroom.academic_year})`;
+                }
+
+                if (modalTargetClass) {
+                    if (data.action === 'promote' && data.target_classroom) {
+                        modalTargetClass.textContent = `${data.target_classroom.name} (${data.target_classroom.academic_year})`;
+                    } else if (data.action === 'graduate') {
+                        modalTargetClass.textContent = 'Alumni (Status: Graduated)';
+                    }
+                }
+
+                if (modalCapacityRow && modalTargetCapacity) {
+                    if (data.action === 'promote' && data.target_classroom) {
+                        modalCapacityRow.classList.remove('d-none');
+                        const tc = data.target_classroom;
+                        modalTargetCapacity.textContent = `${tc.occupied}/${tc.capacity} ➔ ${tc.after_occupied}/${tc.capacity} (${tc.after_remaining} kursi tersisa)`;
+                    } else {
+                        modalCapacityRow.classList.add('d-none');
+                    }
+                }
+
+                if (modalStudentCount && data.summary) {
+                    const invalidText = data.summary.ineligible_count > 0
+                        ? ` (${data.summary.ineligible_count} tidak memenuhi syarat)`
+                        : '';
+                    modalStudentCount.textContent = `${data.summary.valid_count} Siswa Valid${invalidText}`;
+                }
+
+                // Tampilkan pesan error bila tidak lolos verifikasi server
+                if (!data.is_valid) {
+                    if (modalErrorAlert && modalErrorMessage) {
+                        const errorMsg = data.block_reason
+                            || (data.target_classroom?.is_overcapacity
+                                ? `Kapasitas kelas tujuan tidak mencukupi (tersisa ${data.target_classroom.remaining} kursi, dibutuhkan ${data.summary.valid_count}).`
+                                : 'Sebagian siswa yang dipilih sudah tidak memenuhi syarat di rombel asal.');
+                        modalErrorMessage.textContent = errorMsg;
+                        modalErrorAlert.classList.remove('d-none');
+                    }
+                    if (btnSubmitFinal) btnSubmitFinal.disabled = true;
+                } else {
+                    if (modalErrorAlert) modalErrorAlert.classList.add('d-none');
+                    if (btnSubmitFinal) btnSubmitFinal.disabled = false;
+                }
+
+                // Tampilkan peringatan bila ada
+                if (data.warnings && data.warnings.length > 0) {
+                    if (modalWarningAlert && modalWarningMessage) {
+                        modalWarningMessage.textContent = data.warnings.join(' ');
+                        modalWarningAlert.classList.remove('d-none');
+                    }
+                } else if (modalWarningAlert) {
+                    modalWarningAlert.classList.add('d-none');
+                }
+            } catch (error) {
+                console.error('Failed to preview promotion:', error);
+                if (modalErrorAlert && modalErrorMessage) {
+                    modalErrorMessage.textContent = 'Terjadi kesalahan saat memverifikasi data ke server. Silakan coba kembali.';
+                    modalErrorAlert.classList.remove('d-none');
+                }
+                if (btnSubmitFinal) btnSubmitFinal.disabled = true;
+            } finally {
+                if (modalPreviewLoading) modalPreviewLoading.classList.add('d-none');
+                if (modalPreviewContent) modalPreviewContent.classList.remove('d-none');
             }
         });
     }

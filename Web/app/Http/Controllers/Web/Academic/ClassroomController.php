@@ -10,6 +10,7 @@ use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\PromotionBatch;
 use App\Services\Web\Academic\ClassroomService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -139,6 +140,16 @@ class ClassroomController extends Controller
         return response()->view('admin.classrooms.components.promotion.student-rows', [
             'students' => $this->classroomService->getStudentsByClassroom($classroom->id, 'active'),
         ]);
+    }
+
+    /**
+     * Preview batch kenaikan kelas atau kelulusan siswa terpilih sebelum eksekusi (ephemeral review).
+     */
+    public function previewPromotion(Request $request): JsonResponse
+    {
+        $preview = $this->classroomService->previewPromotion($request->all());
+
+        return response()->json($preview);
     }
 
     /**

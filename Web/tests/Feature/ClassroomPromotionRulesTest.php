@@ -617,4 +617,137 @@ class ClassroomPromotionRulesTest extends TestCase
         $this->assertTrue($batch->isReverted());
         $this->assertSame('Salah pilih rombel tujuan pada saat input.', $batch->revert_reason);
     }
+
+    // ── Preview dan Locking Konkurensi ──────────────────────────────────────
+
+    public function test_promotion_preview_returns_accurate_capacities_without_writing_to_db(): void
+    {
+        $admin = $this->createAdmin();
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
+        $studentA = $this->createStudentIn($source, 1);
+        $studentB = $this->createStudentIn($source, 2);
+
+        $beforeEnrollmentCount = StudentEnrollment::count();
+        $beforeBatchCount = PromotionBatch::count();
+        $beforeStudentCount = Student::count();
+
+        $response = $this->actingAs($admin)->postJson(route('admin.classrooms.promotion.preview'), [
+            'action' => 'promote',
+            'source_classroom_id' => $source->id,
+            'target_classroom_id' => $target->id,
+            'student_ids' => [$studentA->id, $studentB->id],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('is_valid', true)
+            ->assertJsonPath('action', 'promote')
+            ->assertJsonPath('summary.selected_count', 2)
+            ->assertJsonPath('summary.valid_count', 2)
+            ->assertJsonPath('summary.ineligible_count', 0)
+            ->assertJsonPath('target_classroom.after_occupied', 2);
+
+        // Tidak menulis apa pun ke database
+        $this->assertSame($beforeEnrollmentCount, StudentEnrollment::count());
+        $this->assertSame($beforeBatchCount, PromotionBatch::count());
+        $this->assertSame($beforeStudentCount, Student::count());
+    }
+
+    public function test_promotion_preview_detects_ineligible_students_and_overcapacity(): void
+    {
+        $admin = $this->createAdmin();
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
+        $studentValid = $this->createStudentIn($source, 1);
+        $studentInactive = $this->createStudentIn($source, 2, 'transferred');
+
+        $response = $this->actingAs($admin)->postJson(route('admin.classrooms.promotion.preview'), [
+            'action' => 'promote',
+            'source_classroom_id' => $source->id,
+            'target_classroom_id' => $target->id,
+            'student_ids' => [$studentValid->id, $studentInactive->id],
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('is_valid', false)
+            ->assertJsonPath('summary.valid_count', 1)
+            ->assertJsonPath('summary.ineligible_count', 1);
+
+        $students = collect($response->json('students'));
+        $this->assertSame('valid', $students->firstWhere('id', $studentValid->id)['status']);
+        $this->assertSame('ineligible', $students->firstWhere('id', $studentInactive->id)['status']);
+    }
+
+    public function test_process_promotion_rejects_stale_target_when_concurrently_filled(): void
+    {
+        $admin = $this->createAdmin();
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
+
+        $studentA = $this->createStudentIn($source, 1);
+        $studentB = $this->createStudentIn($source, 2);
+
+        // Isi rombel tujuan hingga tersisa 1 kursi saja
+        $capacity = Classroom::studentCapacity();
+        for ($i = 1; $i <= $capacity - 1; $i++) {
+            $this->createStudentIn($target, $i);
+        }
+
+        // Coba promosikan 2 siswa ke target yang hanya menyisakan 1 kursi
+        $response = $this->promote($admin, $source, $target, [$studentA->id, $studentB->id]);
+        $response->assertSessionHasErrors('target_classroom_id');
+
+        // Pastikan tidak ada batch parsial yang terbuat dan siswa tetap di rombel asal
+        $this->assertSame(0, PromotionBatch::count());
+        $this->assertSame($source->id, $studentA->fresh()->classroom_id);
+        $this->assertSame($source->id, $studentB->fresh()->classroom_id);
+    }
+
+    public function test_process_promotion_rejects_stale_student_when_concurrently_moved(): void
+    {
+        $admin = $this->createAdmin();
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $otherSource = $this->createClassroom(['name' => 'X MIPA 2', 'level' => '10', 'section' => '2', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
+
+        $studentA = $this->createStudentIn($source, 1);
+        $studentB = $this->createStudentIn($source, 2);
+
+        // Simulasi race condition: siswa B dipindahkan ke rombel lain sesaat sebelum eksekusi
+        StudentEnrollment::query()
+            ->where('student_id', $studentB->id)
+            ->whereNull('ended_at')
+            ->update(['classroom_id' => $otherSource->id]);
+
+        $response = $this->promote($admin, $source, $target, [$studentA->id, $studentB->id]);
+        $response->assertSessionHasErrors('student_ids');
+
+        // Pastikan eksekusi atomik: siswa A tidak ikut terpromosi secara parsial
+        $this->assertSame(0, PromotionBatch::count());
+        $this->assertSame($source->id, $studentA->fresh()->classroom_id);
+    }
+
+    public function test_promotion_preview_requires_admin_authorization(): void
+    {
+        $source = $this->createClassroom(['name' => 'X MIPA 1', 'level' => '10', 'academic_year_id' => $this->yearId('2026/2027')]);
+        $target = $this->createClassroom(['name' => 'XI MIPA 1', 'level' => '11', 'major' => 'MIPA', 'academic_year_id' => $this->yearId('2027/2028')]);
+        $student = $this->createStudentIn($source, 1);
+
+        // Unauthenticated
+        $this->postJson(route('admin.classrooms.promotion.preview'), [
+            'action' => 'promote',
+            'source_classroom_id' => $source->id,
+            'target_classroom_id' => $target->id,
+            'student_ids' => [$student->id],
+        ])->assertUnauthorized();
+
+        // Non-admin (guru)
+        $teacher = $this->createTeacher();
+        $this->actingAs($teacher)->postJson(route('admin.classrooms.promotion.preview'), [
+            'action' => 'promote',
+            'source_classroom_id' => $source->id,
+            'target_classroom_id' => $target->id,
+            'student_ids' => [$student->id],
+        ])->assertForbidden();
+    }
 }

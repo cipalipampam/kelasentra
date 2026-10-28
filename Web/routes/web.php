@@ -85,6 +85,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'role:admin'])->grou
     });
 
     Route::get('classrooms/promotion', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'promotion'])->name('classrooms.promotion');
+    Route::post('classrooms/promotion/preview', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'previewPromotion'])->name('classrooms.promotion.preview');
     Route::post('classrooms/promotion', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'processPromotion'])->name('classrooms.promotion.process');
     Route::post('classrooms/promotion/{promotionBatch}/revert', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'revertPromotion'])->name('classrooms.promotion.revert');
     Route::post('classrooms/duplicate', [\App\Http\Controllers\Web\Academic\ClassroomController::class, 'duplicateClassrooms'])->name('classrooms.duplicate');

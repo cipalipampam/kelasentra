@@ -10,7 +10,7 @@
     @include('admin.classrooms.components.promotion.alerts')
 
     {{-- ===== FORM UTAMA PROMOSI ===== --}}
-    <form id="promotionForm" action="{{ route('admin.classrooms.promotion.process') }}" method="POST">
+    <form id="promotionForm" action="{{ route('admin.classrooms.promotion.process') }}" data-preview-url="{{ route('admin.classrooms.promotion.preview') }}" method="POST">
         @csrf
 
         {{-- LANGKAH 1: PENGATURAN ROMBEL & JENIS PROSES --}}
