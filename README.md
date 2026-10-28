@@ -350,12 +350,7 @@ Foto bukti presensi baru disimpan pada disk privat dan diakses melalui URL berta
 
 ## 📚 Dokumentasi Domain
 
-Aturan akademik (tahun ajaran, enrollment siswa, kenaikan kelas, penugasan mengajar, dan presensi) beserta invariant-nya didokumentasikan di:
-
-- [`docs/academic-domain-spec.md`](docs/academic-domain-spec.md) — spesifikasi final: keputusan desain (D1–D14), daftar invariant, dan perubahan skema.
 - [`docs/subject-schedule-teacher-logic-review.md`](docs/subject-schedule-teacher-logic-review.md) — review logic dan perbaikan kualifikasi guru, mata pelajaran, dan jadwal.
-
-Baca dokumen tersebut sebelum mengubah perilaku domain akademik.
 
 ## 🧪 Pengujian
 
