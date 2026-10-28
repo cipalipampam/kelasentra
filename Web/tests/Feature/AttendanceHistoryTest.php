@@ -9,6 +9,7 @@ use App\Models\ScheduleAttendance;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\Shared\Attendance\AttendanceContext;
+use App\Services\Web\Academic\ClassroomService;
 use App\Services\Web\Academic\EnrollmentService;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Database\QueryException;
@@ -239,5 +240,151 @@ class AttendanceHistoryTest extends TestCase
         $this->actingAs($admin)->delete(route('admin.students.destroy', $student->user_id));
 
         $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    public function test_subject_attendance_uses_historical_enrollment_for_backdated_entry(): void
+    {
+        $teacher = User::factory()->create();
+        $teacher->assignRole('guru');
+        $classroom = $this->classroom(['name' => 'X MIPA 1', 'section' => '1']);
+        $subject = $this->makeSubject('Matematika');
+        $schedule = $this->makeSchedule($classroom, $subject, $teacher);
+
+        $student = $this->enrollStudent($classroom, 'S-HIST-1', 'active', null, '2026-07-01');
+        $enrollment = $student->currentEnrollment;
+
+        // Pada 1 September, siswa keluar/mutasi sehingga enrollment ditutup
+        $enrollment->update(['ended_at' => '2026-09-01']);
+        $student->update(['academic_status' => 'transferred']);
+
+        Sanctum::actingAs($teacher);
+
+        // Guru rombel menginput presensi tanggal lampau (15 Agustus saat siswa masih aktif di kelas ini)
+        $this->postJson("/api/v1/schedules/{$schedule->id}/class-attendance", [
+            'attendance_date' => '2026-08-15',
+            'attendances' => [[
+                'student_id' => $student->id,
+                'status' => 'present',
+            ]],
+        ])->assertOk();
+
+        $record = ScheduleAttendance::where('student_id', $student->id)
+            ->whereDate('attendance_date', '2026-08-15')
+            ->firstOrFail();
+
+        // Absensi tanggal lampau tetap terikat pada enrollment historis siswa
+        $this->assertSame($enrollment->id, $record->student_enrollment_id);
+    }
+
+    public function test_subject_attendance_rejects_student_not_enrolled_in_classroom_on_date(): void
+    {
+        $teacher = User::factory()->create();
+        $teacher->assignRole('guru');
+        $classroom = $this->classroom(['name' => 'X MIPA 1', 'section' => '1']);
+        $subject = $this->makeSubject('Kimia');
+        $schedule = $this->makeSchedule($classroom, $subject, $teacher);
+
+        // Siswa terdaftar sejak 1 September
+        $student = $this->enrollStudent($classroom, 'S-HIST-2', 'active', null, '2026-09-01');
+
+        Sanctum::actingAs($teacher);
+
+        // Guru mencoba absen siswa untuk tanggal sebelum siswa bergabung (15 Agustus)
+        $this->postJson("/api/v1/schedules/{$schedule->id}/class-attendance", [
+            'attendance_date' => '2026-08-15',
+            'attendances' => [[
+                'student_id' => $student->id,
+                'status' => 'present',
+            ]],
+        ])->assertStatus(422);
+
+        // Siswa ditransfer pada 10 September
+        $student->currentEnrollment->update(['ended_at' => '2026-09-10']);
+        $student->update(['academic_status' => 'transferred']);
+
+        // Guru mencoba absen siswa untuk tanggal setelah siswa keluar (15 September)
+        $this->postJson("/api/v1/schedules/{$schedule->id}/class-attendance", [
+            'attendance_date' => '2026-09-15',
+            'attendances' => [[
+                'student_id' => $student->id,
+                'status' => 'present',
+            ]],
+        ])->assertStatus(422);
+    }
+
+    public function test_revert_promotion_preserves_attendance_history_on_both_enrollments(): void
+    {
+        $admin = $this->createAdmin();
+        $teacher = User::factory()->create();
+        $teacher->assignRole('guru');
+
+        $sourceClass = $this->classroom(['name' => 'X MIPA 1', 'level' => '10', 'section' => '1']);
+        $targetYear = AcademicYear::create(['name' => '2027/2028', 'status' => AcademicYear::STATUS_UPCOMING]);
+        $targetClass = Classroom::create([
+            'name' => 'XI MIPA 1',
+            'level' => '11',
+            'major' => 'MIPA',
+            'section' => '1',
+            'academic_year_id' => $targetYear->id,
+            'is_active' => true,
+        ]);
+
+        $sourceSubject = $this->makeSubject('Matematika 10');
+        $targetSubject = $this->makeSubject('Matematika 11');
+        $sourceSchedule = $this->makeSchedule($sourceClass, $sourceSubject, $teacher);
+        $targetSchedule = $this->makeSchedule($targetClass, $targetSubject, $teacher);
+
+        $student = $this->enrollStudent($sourceClass, 'S-HIST-3', 'active', null, '2026-07-01');
+        $sourceEnrollment = $student->currentEnrollment;
+
+        // Jalankan promosi batch ke kelas XI
+        $classroomService = app(ClassroomService::class);
+        $batch = $classroomService->processPromotion([
+            'academic_year_id' => $targetYear->id,
+            'source_classroom_id' => $sourceClass->id,
+            'target_classroom_id' => $targetClass->id,
+            'action' => 'promote',
+            'student_ids' => [$student->id],
+        ], $admin);
+
+        $targetEnrollment = $student->refresh()->currentEnrollment;
+        $this->assertSame($targetClass->id, $targetEnrollment->classroom_id);
+
+        // Catat absensi pada kelas XI
+        Sanctum::actingAs($teacher);
+        $this->postJson("/api/v1/schedules/{$targetSchedule->id}/class-attendance", [
+            'attendance_date' => now()->toDateString(),
+            'attendances' => [[
+                'student_id' => $student->id,
+                'status' => 'present',
+            ]],
+        ])->assertOk();
+
+        // Revert batch promosi
+        $classroomService->revertBatch($batch, $admin, 'Salah pilih rombel');
+
+        // Enrollment XI ditutup (bukan dihapus), enrollment X dibuka kembali
+        $this->assertNotNull($targetEnrollment->refresh()->ended_at);
+        $this->assertNull($sourceEnrollment->refresh()->ended_at);
+
+        // Absensi di kelas XI tetap menunjuk enrollment XI
+        $attendanceRecord = ScheduleAttendance::where('schedule_id', $targetSchedule->id)
+            ->where('student_id', $student->id)
+            ->firstOrFail();
+        $this->assertSame($targetEnrollment->id, $attendanceRecord->student_enrollment_id);
+
+        // Absensi baru di kelas X menunjuk enrollment X yang dipulihkan
+        $this->postJson("/api/v1/schedules/{$sourceSchedule->id}/class-attendance", [
+            'attendance_date' => now()->toDateString(),
+            'attendances' => [[
+                'student_id' => $student->id,
+                'status' => 'present',
+            ]],
+        ])->assertOk();
+
+        $sourceAttendanceRecord = ScheduleAttendance::where('schedule_id', $sourceSchedule->id)
+            ->where('student_id', $student->id)
+            ->firstOrFail();
+        $this->assertSame($sourceEnrollment->id, $sourceAttendanceRecord->student_enrollment_id);
     }
 }

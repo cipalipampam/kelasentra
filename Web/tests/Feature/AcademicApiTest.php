@@ -227,6 +227,38 @@ class AcademicApiTest extends TestCase
             ->assertJsonPath('data.unread_notifications_count', 1);
     }
 
+    public function test_roster_reflects_historical_enrollment_on_past_date(): void
+    {
+        $classroomA = $this->classroom();
+        $teacher = User::factory()->create();
+        $teacher->assignRole('guru');
+        $scheduleA = $this->schedule($classroomA, 1, $teacher);
+
+        // Siswa 1 di kelas A sejak Juli, lalu mutasi pada 1 September sehingga enrollment ditutup
+        $student1 = $this->enrollStudent($classroomA, 'S-ROSTER-1', 'active', null, '2026-07-01');
+        $student1->currentEnrollment->update(['ended_at' => '2026-09-01']);
+        $student1->update(['academic_status' => 'transferred']);
+
+        // Siswa 2 baru masuk kelas A pada 1 September
+        $user2 = User::factory()->create();
+        $user2->assignRole('siswa');
+        $student2 = $this->enrollStudent($classroomA, 'S-ROSTER-2', 'active', $user2, '2026-09-01');
+
+        Sanctum::actingAs($teacher);
+
+        // Roster 15 Agustus (sebelum siswa 1 keluar, sebelum siswa 2 masuk): hanya ada siswa 1
+        $resAug = $this->getJson("/api/v1/schedules/{$scheduleA->id}/class-attendance?attendance_date=2026-08-15");
+        $resAug->assertOk()
+            ->assertJsonCount(1, 'data.students')
+            ->assertJsonPath('data.students.0.id', $student1->id);
+
+        // Roster 15 September (setelah siswa 1 keluar, siswa 2 sudah masuk): hanya ada siswa 2
+        $resSep = $this->getJson("/api/v1/schedules/{$scheduleA->id}/class-attendance?attendance_date=2026-09-15");
+        $resSep->assertOk()
+            ->assertJsonCount(1, 'data.students')
+            ->assertJsonPath('data.students.0.id', $student2->id);
+    }
+
     private function classroom(): Classroom
     {
         return Classroom::create([

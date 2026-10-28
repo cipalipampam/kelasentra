@@ -18,9 +18,12 @@ class AttendanceContext
     /**
      * @return array{academic_year_id: int, classroom_id: ?int}
      */
-    public static function forUser(?User $user): array
+    public static function forUser(?User $user, ?string $date = null): array
     {
-        $enrollment = $user?->student?->currentEnrollment;
+        $student = $user?->student;
+        $enrollment = $date !== null && $student !== null
+            ? $student->enrollmentForDate($date)
+            : $student?->currentEnrollment;
 
         return [
             'academic_year_id' => $enrollment?->academic_year_id ?? self::requireCurrentYear(),

@@ -46,8 +46,13 @@ abstract class TestCase extends BaseTestCase
     /**
      * Membuat siswa sekaligus menempatkannya di sebuah rombel lewat enrollment.
      */
-    protected function enrollStudent(Classroom $classroom, string $nis, string $status = 'active', ?User $user = null): Student
-    {
+    protected function enrollStudent(
+        Classroom $classroom,
+        string $nis,
+        string $status = 'active',
+        ?User $user = null,
+        ?string $startedAt = null,
+    ): Student {
         $user ??= tap(User::factory()->create(), fn (User $account) => $account->assignRole('siswa'));
 
         $student = Student::create([
@@ -57,11 +62,16 @@ abstract class TestCase extends BaseTestCase
             'entry_academic_year_id' => $classroom->academic_year_id,
         ]);
 
+        $classroom->loadMissing('academicYear');
+        $effectiveStart = $startedAt
+            ?? $classroom->academicYear?->start_date?->toDateString()
+            ?? '2026-07-01';
+
         StudentEnrollment::create([
             'student_id' => $student->getKey(),
             'academic_year_id' => $classroom->academic_year_id,
             'classroom_id' => $classroom->getKey(),
-            'started_at' => now()->toDateString(),
+            'started_at' => $effectiveStart,
         ]);
 
         return $student;

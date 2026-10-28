@@ -72,6 +72,17 @@ class Student extends Model
         return $this->hasOne(StudentEnrollment::class)->latestOfMany();
     }
 
+    /**
+     * Mengambil enrollment siswa yang aktif pada tanggal tertentu.
+     */
+    public function enrollmentForDate(string $date): ?StudentEnrollment
+    {
+        return $this->enrollments()
+            ->forDate($date)
+            ->latest('started_at')
+            ->first();
+    }
+
     public function entryAcademicYear(): BelongsTo
     {
         return $this->belongsTo(AcademicYear::class, 'entry_academic_year_id');

@@ -21,7 +21,8 @@ class AdminAttendanceService
         $data['proof_image'] = isset($data['proof_image'])
             ? $this->proofStorage->store($data['proof_image'])
             : null;
-        $context = AttendanceContext::forUser(User::find($data['user_id'] ?? null));
+        $recordDate = isset($data['recorded_at']) ? substr((string) $data['recorded_at'], 0, 10) : null;
+        $context = AttendanceContext::forUser(User::find($data['user_id'] ?? null), $recordDate);
 
         $attendance = Attendance::create(array_merge($context, $data));
         $this->notify($attendance, 'created');
@@ -32,7 +33,10 @@ class AdminAttendanceService
     public function update(Attendance $attendance, array $data): Attendance
     {
         if (isset($data['user_id']) && (int) $data['user_id'] !== $attendance->user_id) {
-            $data = array_merge(AttendanceContext::forUser(User::find($data['user_id'])), $data);
+            $recordDate = isset($data['recorded_at'])
+                ? substr((string) $data['recorded_at'], 0, 10)
+                : substr((string) $attendance->recorded_at, 0, 10);
+            $data = array_merge(AttendanceContext::forUser(User::find($data['user_id']), $recordDate), $data);
         }
 
         if (isset($data['proof_image'])) {

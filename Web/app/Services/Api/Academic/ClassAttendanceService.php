@@ -10,6 +10,7 @@ use App\Models\Student;
 use App\Models\StudentEnrollment;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -39,8 +40,10 @@ class ClassAttendanceService
     public function roster(Schedule $schedule, string $date): array
     {
         $students = Student::query()
-            ->whereHas('currentEnrollment', fn ($enrollment) => $enrollment->where('classroom_id', $schedule->classroom_id))
-            ->where('academic_status', 'active')
+            ->whereHas('enrollments', fn ($enrollment) => $enrollment
+                ->where('classroom_id', $schedule->classroom_id)
+                ->forDate($date)
+            )
             ->with([
                 'user:id,name',
                 'scheduleAttendances' => fn ($query) => $query
@@ -73,16 +76,44 @@ class ClassAttendanceService
         })->values()->all();
     }
 
-    public function hasOnlyEligibleStudents(Schedule $schedule, array $attendances): bool
+    /**
+     * Mengambil enrollment yang aktif untuk daftar siswa pada tanggal kejadian,
+     * yang harus cocok dengan rombel schedule.
+     *
+     * @param  iterable<int>  $studentIds
+     * @return Collection<int, StudentEnrollment> Keyed by student_id
+     */
+    public function resolveEnrollmentsForDate(iterable $studentIds, string $date, ?int $classroomId = null): Collection
     {
-        $studentIds = collect($attendances)->pluck('student_id');
-        $eligibleCount = Student::query()
-            ->whereHas('currentEnrollment', fn ($enrollment) => $enrollment->where('classroom_id', $schedule->classroom_id))
-            ->where('academic_status', 'active')
-            ->whereIn('id', $studentIds)
-            ->count();
+        $ids = collect($studentIds)->filter()->unique()->values()->all();
 
-        return $eligibleCount === $studentIds->unique()->count();
+        if (empty($ids)) {
+            return collect();
+        }
+
+        return StudentEnrollment::query()
+            ->whereIn('student_id', $ids)
+            ->when($classroomId !== null, fn ($query) => $query->where('classroom_id', $classroomId))
+            ->forDate($date)
+            ->orderByDesc('started_at')
+            ->orderByDesc('id')
+            ->get()
+            ->unique('student_id')
+            ->keyBy('student_id');
+    }
+
+    public function hasOnlyEligibleStudents(Schedule $schedule, array $attendances, ?string $rawDate = null): bool
+    {
+        $date = $this->date($rawDate);
+        $studentIds = collect($attendances)->pluck('student_id')->filter()->unique();
+
+        if ($studentIds->isEmpty()) {
+            return false;
+        }
+
+        $enrollments = $this->resolveEnrollmentsForDate($studentIds, $date, $schedule->classroom_id);
+
+        return $enrollments->count() === $studentIds->count();
     }
 
     public function store(User $teacher, Schedule $schedule, ?string $rawDate, array $attendances): array
@@ -93,26 +124,29 @@ class ClassAttendanceService
             ]);
         }
 
-        if (! $this->hasOnlyEligibleStudents($schedule, $attendances)) {
+        $date = $this->date($rawDate);
+        $studentIds = collect($attendances)->pluck('student_id')->filter()->unique();
+
+        if ($studentIds->isEmpty()) {
             throw ValidationException::withMessages([
-                'attendances' => 'Daftar presensi memuat siswa yang bukan anggota aktif kelas ini.',
+                'attendances' => 'Daftar presensi siswa wajib diisi.',
             ]);
         }
 
-        $date = $this->date($rawDate);
-        $now = now();
+        $enrollments = $this->resolveEnrollmentsForDate($studentIds, $date, $schedule->classroom_id);
 
-        // Enrollment berlaku dibekukan pada setiap baris agar absensi tetap
-        // menunjuk rombel yang benar walau siswa kemudian berpindah kelas.
-        $enrollments = StudentEnrollment::query()
-            ->whereIn('student_id', collect($attendances)->pluck('student_id'))
-            ->whereNull('ended_at')
-            ->pluck('id', 'student_id');
+        if ($enrollments->count() !== $studentIds->count()) {
+            throw ValidationException::withMessages([
+                'attendances' => 'Daftar presensi memuat siswa yang bukan anggota aktif kelas ini pada tanggal presensi.',
+            ]);
+        }
+
+        $now = now();
 
         $records = collect($attendances)->map(fn (array $attendance) => [
             'schedule_id' => $schedule->id,
             'student_id' => $attendance['student_id'],
-            'student_enrollment_id' => $enrollments[$attendance['student_id']] ?? null,
+            'student_enrollment_id' => $enrollments->get($attendance['student_id'])->getKey(),
             'teacher_id' => $teacher->id,
             'attendance_date' => $date,
             'status' => $attendance['status'],

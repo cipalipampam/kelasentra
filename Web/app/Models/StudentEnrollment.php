@@ -51,6 +51,19 @@ class StudentEnrollment extends Model
         return $query->whereNull('ended_at');
     }
 
+    /**
+     * Enrollment yang aktif pada tanggal tertentu.
+     * Mendukung presensi lampau (backdate) dan pelacakan historis perpindahan rombel.
+     */
+    public function scopeForDate(Builder $query, string $date): Builder
+    {
+        return $query->whereDate('started_at', '<=', $date)
+            ->where(function (Builder $sub) use ($date) {
+                $sub->whereNull('ended_at')
+                    ->orWhereDate('ended_at', '>=', $date);
+            });
+    }
+
     public function isCurrent(): bool
     {
         return $this->ended_at === null;
