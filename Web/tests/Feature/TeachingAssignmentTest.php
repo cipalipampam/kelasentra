@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\Subject;
 use App\Models\TeachingAssignment;
@@ -207,5 +208,39 @@ class TeachingAssignmentTest extends TestCase
             'email' => $teacher->email,
             'role' => 'staff',
         ]);
+    }
+
+    public function test_assignment_is_rejected_for_inactive_classroom(): void
+    {
+        $classroom = $this->classroom('X MIPA 1');
+        $classroom->update(['is_active' => false]);
+        $subject = $this->makeSubject();
+        $teacher = $this->teacherFor($subject);
+
+        $this->expectException(ValidationException::class);
+
+        app(TeachingAssignmentService::class)->assign($classroom, $subject, $teacher);
+    }
+
+    public function test_assignment_is_rejected_for_closed_academic_year(): void
+    {
+        $closedYear = AcademicYear::create([
+            'name' => '2024/2025',
+            'status' => AcademicYear::STATUS_CLOSED,
+        ]);
+        $classroom = Classroom::create([
+            'name' => 'X MIPA 3',
+            'level' => '10',
+            'major' => 'MIPA',
+            'section' => '3',
+            'academic_year_id' => $closedYear->id,
+            'is_active' => true,
+        ]);
+        $subject = $this->makeSubject();
+        $teacher = $this->teacherFor($subject);
+
+        $this->expectException(ValidationException::class);
+
+        app(TeachingAssignmentService::class)->assign($classroom, $subject, $teacher);
     }
 }

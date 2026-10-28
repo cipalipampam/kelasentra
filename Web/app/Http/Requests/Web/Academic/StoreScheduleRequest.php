@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Web\Academic;
 
+use App\Models\Classroom;
 use App\Rules\EligibleTeachingTeacher;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -15,7 +16,22 @@ class StoreScheduleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'classroom_id' => ['required', 'exists:classrooms,id'],
+            'classroom_id' => [
+                'required',
+                'exists:classrooms,id',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $classroom = Classroom::with('academicYear')->find($value);
+                    if (! $classroom) {
+                        return;
+                    }
+                    if (! $classroom->is_active) {
+                        $fail("Rombel {$classroom->name} tidak aktif sehingga tidak dapat menerima jadwal.");
+                    }
+                    if (! $classroom->academicYear?->isOperable()) {
+                        $fail("Tahun ajaran rombel {$classroom->name} sudah selesai sehingga tidak dapat menerima jadwal.");
+                    }
+                },
+            ],
             'subject_id' => ['required', 'exists:subjects,id'],
             'teacher_id' => ['required', 'exists:users,id', new EligibleTeachingTeacher($this->integer('subject_id') ?: null)],
             'day_of_week' => ['required', 'integer', 'between:1,5'],

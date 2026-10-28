@@ -6,7 +6,6 @@ use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\Schedule;
 use App\Models\Subject;
-use App\Models\TeachingAssignment;
 use App\Models\User;
 use App\Rules\EligibleTeachingTeacher;
 use Carbon\Carbon;
@@ -19,9 +18,13 @@ class ScheduleService
     ) {}
 
     public const JP_MINUTES = 45;
+
     public const MIN_JP_PER_WEEK = 24;
+
     public const MAX_JP_PER_WEEK = 40;
+
     public const SCHOOL_START_TIME = '07:00';
+
     public const SCHOOL_END_TIME = '16:00';
 
     /**
@@ -218,7 +221,26 @@ class ScheduleService
             ]);
         }
 
-        $academicYearId = Classroom::query()->whereKey($classroomId)->value('academic_year_id');
+        $classroom = Classroom::with('academicYear')->find($classroomId);
+        if (! $classroom) {
+            throw ValidationException::withMessages([
+                'classroom_id' => 'Data rombel kelas tidak ditemukan.',
+            ]);
+        }
+
+        if (! $classroom->is_active) {
+            throw ValidationException::withMessages([
+                'classroom_id' => "Rombel {$classroom->name} tidak aktif sehingga tidak dapat menerima jadwal baru.",
+            ]);
+        }
+
+        if (! $classroom->academicYear?->isOperable()) {
+            throw ValidationException::withMessages([
+                'classroom_id' => "Tahun ajaran rombel {$classroom->name} sudah selesai sehingga tidak dapat menerima jadwal.",
+            ]);
+        }
+
+        $academicYearId = $classroom->academic_year_id;
 
         // 5. Anti-Bentrok Guru, dibatasi tahun ajaran yang sama agar penyusunan
         //    jadwal tahun berikutnya tidak dianggap bentrok.
@@ -273,6 +295,19 @@ class ScheduleService
      */
     public function updateSchedule(Schedule $schedule, array $data): bool
     {
+        $schedule->loadMissing('assignment.classroom.academicYear');
+        if (! $schedule->classroom?->academicYear?->isOperable()) {
+            throw ValidationException::withMessages([
+                'classroom_id' => 'Jadwal pada tahun ajaran yang sudah selesai tidak dapat diubah.',
+            ]);
+        }
+
+        if (! $schedule->classroom?->is_active) {
+            throw ValidationException::withMessages([
+                'classroom_id' => "Rombel {$schedule->classroom?->name} tidak aktif sehingga jadwal tidak dapat diubah.",
+            ]);
+        }
+
         $this->validateScheduleSlot($data, $schedule->getKey());
 
         return $schedule->update($this->scheduleAttributes($data, $schedule));
@@ -308,7 +343,13 @@ class ScheduleService
      */
     public function deleteSchedule(Schedule $schedule): bool
     {
+        $schedule->loadMissing('assignment.classroom.academicYear');
+        if (! $schedule->classroom?->academicYear?->isOperable()) {
+            throw ValidationException::withMessages([
+                'classroom_id' => 'Jadwal pada tahun ajaran yang sudah selesai tidak dapat dihapus.',
+            ]);
+        }
+
         return (bool) $schedule->delete();
     }
 }
-

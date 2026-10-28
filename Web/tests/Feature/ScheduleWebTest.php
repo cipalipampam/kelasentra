@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AcademicYear;
 use App\Models\Classroom;
 use App\Models\Schedule;
 use App\Models\Subject;
@@ -183,5 +184,78 @@ class ScheduleWebTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors(['start_time']);
+    }
+
+    public function test_admin_cannot_store_schedule_for_inactive_classroom(): void
+    {
+        $this->classroom->update(['is_active' => false]);
+
+        $response = $this->actingAs($this->admin)->post(route('admin.schedules.store'), [
+            'classroom_id' => $this->classroom->id,
+            'subject_id' => $this->subject->id,
+            'teacher_id' => $this->teacher->id,
+            'day_of_week' => 2,
+            'start_time' => '10:00',
+            'end_time' => '11:30',
+        ]);
+
+        $response->assertSessionHasErrors('classroom_id');
+        $this->assertDatabaseEmpty('schedules');
+    }
+
+    public function test_admin_cannot_store_schedule_for_closed_academic_year(): void
+    {
+        $closedYear = AcademicYear::create([
+            'name' => '2024/2025',
+            'status' => AcademicYear::STATUS_CLOSED,
+        ]);
+        $closedClassroom = Classroom::create([
+            'name' => 'X-MIPA 9',
+            'level' => '10',
+            'major' => 'MIPA',
+            'section' => '9',
+            'academic_year_id' => $closedYear->id,
+            'is_active' => true,
+        ]);
+
+        $response = $this->actingAs($this->admin)->post(route('admin.schedules.store'), [
+            'classroom_id' => $closedClassroom->id,
+            'subject_id' => $this->subject->id,
+            'teacher_id' => $this->teacher->id,
+            'day_of_week' => 2,
+            'start_time' => '10:00',
+            'end_time' => '11:30',
+        ]);
+
+        $response->assertSessionHasErrors('classroom_id');
+        $this->assertDatabaseEmpty('schedules');
+    }
+
+    public function test_admin_cannot_update_schedule_belonging_to_closed_academic_year(): void
+    {
+        $closedYear = AcademicYear::create([
+            'name' => '2024/2025',
+            'status' => AcademicYear::STATUS_CLOSED,
+        ]);
+        $closedClassroom = Classroom::create([
+            'name' => 'X-MIPA 8',
+            'level' => '10',
+            'major' => 'MIPA',
+            'section' => '8',
+            'academic_year_id' => $closedYear->id,
+            'is_active' => true,
+        ]);
+        $schedule = $this->makeSchedule($closedClassroom, $this->subject, $this->teacher, 3, '07:15:00', '08:45:00');
+
+        $response = $this->actingAs($this->admin)->put(route('admin.schedules.update', $schedule->id), [
+            'classroom_id' => $this->classroom->id,
+            'subject_id' => $this->subject->id,
+            'teacher_id' => $this->teacher->id,
+            'day_of_week' => 3,
+            'start_time' => '07:30',
+            'end_time' => '09:00',
+        ]);
+
+        $response->assertSessionHasErrors('classroom_id');
     }
 }

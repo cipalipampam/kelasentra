@@ -7,6 +7,7 @@ use App\Models\Subject;
 use App\Models\TeachingAssignment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Mengelola penugasan guru (teaching assignment).
@@ -19,6 +20,19 @@ class TeachingAssignmentService
 {
     public function assign(Classroom $classroom, Subject $subject, User $teacher): TeachingAssignment
     {
+        if (! $classroom->is_active) {
+            throw ValidationException::withMessages([
+                'classroom_id' => "Rombel {$classroom->name} tidak aktif sehingga tidak dapat menerima penugasan mengajar.",
+            ]);
+        }
+
+        $classroom->loadMissing('academicYear');
+        if (! $classroom->academicYear?->isOperable()) {
+            throw ValidationException::withMessages([
+                'classroom_id' => "Tahun ajaran rombel {$classroom->name} sudah selesai sehingga tidak dapat menerima penugasan mengajar.",
+            ]);
+        }
+
         return DB::transaction(function () use ($classroom, $subject, $teacher) {
             $active = TeachingAssignment::query()
                 ->where('classroom_id', $classroom->getKey())

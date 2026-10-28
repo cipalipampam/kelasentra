@@ -113,11 +113,16 @@ class ScheduleController extends Controller
 
     public function destroy(Schedule $schedule): RedirectResponse
     {
-        $classroomId = $schedule->classroom_id;
-        $this->scheduleService->deleteSchedule($schedule);
+        try {
+            $classroomId = $schedule->classroom_id;
+            $this->scheduleService->deleteSchedule($schedule);
 
-        return redirect()->route('admin.schedules.index', ['classroom_id' => $classroomId])
-            ->with('success', 'Jadwal pelajaran berhasil dihapus.');
+            return redirect()->route('admin.schedules.index', ['classroom_id' => $classroomId])
+                ->with('success', 'Jadwal pelajaran berhasil dihapus.');
+        } catch (ValidationException $e) {
+            return redirect()->back()
+                ->withErrors($e->errors());
+        }
     }
 
     /**
@@ -142,4 +147,3 @@ class ScheduleController extends Controller
         ]);
     }
 }
-
