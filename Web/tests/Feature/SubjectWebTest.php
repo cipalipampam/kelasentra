@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Classroom;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -97,5 +98,45 @@ class SubjectWebTest extends TestCase
         $response->assertSessionHas('success');
         // Riwayat mata pelajaran tetap tersimpan: nonaktif, bukan hilang.
         $this->assertSoftDeleted('subjects', ['id' => $subject->id]);
+    }
+
+    public function test_subject_index_counts_schedules_and_blocks_deletion_when_used(): void
+    {
+        $subject = Subject::create([
+            'code' => 'TEST-USED',
+            'name' => 'Used Subject',
+            'cluster' => 'mipa',
+            'color_code' => '#123456',
+            'is_active' => true,
+        ]);
+        $teacher = User::factory()->create();
+        $classroom = Classroom::create([
+            'name' => 'X MIPA 1',
+            'level' => '10',
+            'major' => 'MIPA',
+            'section' => '1',
+            'academic_year_id' => $this->yearId('2026/2027'),
+        ]);
+
+        $this->createSchedule([
+            'classroom_id' => $classroom->id,
+            'subject_id' => $subject->id,
+            'teacher_id' => $teacher->id,
+            'day_of_week' => 1,
+            'start_time' => '07:00:00',
+            'end_time' => '08:30:00',
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.subjects.index'))
+            ->assertOk()
+            ->assertSee('1 Jadwal');
+
+        $this->actingAs($this->admin)
+            ->delete(route('admin.subjects.destroy', $subject))
+            ->assertRedirect(route('admin.subjects.index'))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('subjects', ['id' => $subject->id, 'deleted_at' => null]);
     }
 }

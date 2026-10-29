@@ -440,6 +440,7 @@
                         </div>
                     </div>
                     <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+                </div>
                 <div class="modal-body py-3 px-4">
                     <div class="row g-3">
                         <div class="col-12">

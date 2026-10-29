@@ -45,6 +45,16 @@ class Schedule extends Model
         return $this->assignment?->classroom_id;
     }
 
+    public function getSubjectIdAttribute(): ?int
+    {
+        return $this->assignment?->subject_id;
+    }
+
+    public function getTeacherIdAttribute(): ?int
+    {
+        return $this->assignment?->teacher_id;
+    }
+
     public function getSubjectAttribute(): ?Subject
     {
         return $this->assignment?->subject;

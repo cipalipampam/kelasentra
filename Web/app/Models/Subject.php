@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Subject extends Model
@@ -26,6 +27,11 @@ class Subject extends Model
     public function assignments(): HasMany
     {
         return $this->hasMany(TeachingAssignment::class);
+    }
+
+    public function schedules(): HasManyThrough
+    {
+        return $this->hasManyThrough(Schedule::class, TeachingAssignment::class);
     }
 
     public function teachers()

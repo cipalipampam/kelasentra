@@ -57,8 +57,10 @@ class ScheduleService
             5 => ['name' => 'Jumat', 'jp' => 0, 'minutes' => 0, 'slots' => 0],
         ];
 
-        // Eager load teacher subjects (utama vs serumpun)
-        $teacherSubjects = $teacher->subjects()->get()->keyBy('id');
+        // Gunakan relasi yang sudah dimuat oleh pemanggil bila tersedia.
+        $teacherSubjects = $teacher->relationLoaded('subjects')
+            ? $teacher->subjects->keyBy('id')
+            : $teacher->subjects()->get()->keyBy('id');
 
         foreach ($schedules as $sched) {
             $duration = $sched->duration_in_minutes;

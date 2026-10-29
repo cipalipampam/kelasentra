@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Classroom;
-use App\Models\Schedule;
 use App\Models\Subject;
 use App\Models\User;
 use App\Services\Web\Academic\ScheduleService;
@@ -99,6 +98,8 @@ class ScheduleWorkloadTest extends TestCase
         $this->assertEquals(2, $sched->jp_count);
         $this->assertEquals('07:15 - 08:45', $sched->formatted_time_range);
         $this->assertEquals('Senin', $sched->day_name);
+        $this->assertSame($this->mainSubject->id, $sched->subject_id);
+        $this->assertSame($this->teacher->id, $sched->teacher_id);
     }
 
     public function test_cannot_schedule_outside_school_days_or_hours(): void
@@ -214,6 +215,9 @@ class ScheduleWorkloadTest extends TestCase
         $this->assertEquals('underload', $workload['status']);
         $this->assertEquals('warning', $workload['status_color']);
         $this->assertEquals(8, $workload['target_percentage']); // 2 / 24 * 100 = 8%
+        $this->assertCount(1, $workload['subjects']);
+        $this->assertSame($this->mainSubject->id, $workload['subjects'][0]['subject']->id);
+        $this->assertTrue($workload['subjects'][0]['is_primary']);
 
         // 2. Tambah jadwal hingga mencapai 24 JP (11 sesi 90 menit lagi = 22 JP, total 24 JP)
         $days = [1, 2, 3, 4, 5];
