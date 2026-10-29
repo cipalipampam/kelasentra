@@ -381,11 +381,6 @@
                             <label class="form-label text-dark fw-semibold small">Guru Pengampu (Linier) <span class="text-danger">*</span></label>
                             <select name="teacher_id" id="create_teacher_id" class="form-select" required>
                                 <option value="" disabled selected>— Pilih Mata Pelajaran Terlebih Dahulu —</option>
-                                @foreach($teachers as $tch)
-                                    <option value="{{ $tch->id }}" {{ old('teacher_id') == $tch->id ? 'selected' : '' }}>
-                                        {{ $tch->name }}
-                                    </option>
-                                @endforeach
                             </select>
                             <div class="form-text">Opsi guru difilter secara otomatis berdasarkan linieritas mapel</div>
                         </div>
@@ -490,7 +485,7 @@
                         <div class="col-12">
                             <label class="form-label text-dark fw-semibold small">Guru Pengampu (Linier) <span class="text-danger">*</span></label>
                             <select name="teacher_id" id="edit_teacher_id_{{ $sched->id }}" class="form-select" required>
-                                @foreach($teachers as $tch)
+                                @foreach($teachersBySubject->get($sched->subject_id, collect()) as $tch)
                                     <option value="{{ $tch->id }}" {{ old('teacher_id', $sched->teacher_id) == $tch->id ? 'selected' : '' }}>
                                         {{ $tch->name }}
                                     </option>

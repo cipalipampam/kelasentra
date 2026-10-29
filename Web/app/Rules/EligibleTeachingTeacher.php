@@ -41,11 +41,15 @@ class EligibleTeachingTeacher implements ValidationRule
 
         $employee = $teacher->employee;
 
-        if ($employee !== null && ! $employee->is_teacher) {
+        if ($employee === null) {
+            return "Data kepegawaian guru {$teacher->name} tidak ditemukan. Pastikan profil pegawai sudah dilengkapi.";
+        }
+
+        if (! $employee->is_teacher) {
             return "{$teacher->name} bukan tenaga pengajar.";
         }
 
-        if ($employee !== null && ! $employee->isActive()) {
+        if (! $employee->isActive()) {
             return "Guru berstatus {$employee->statusLabel()} tidak dapat menerima penugasan baru.";
         }
 

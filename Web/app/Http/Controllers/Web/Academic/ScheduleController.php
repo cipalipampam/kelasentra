@@ -7,6 +7,7 @@ use App\Http\Requests\Web\Academic\StoreScheduleRequest;
 use App\Http\Requests\Web\Academic\UpdateScheduleRequest;
 use App\Models\AcademicYear;
 use App\Models\Classroom;
+use App\Models\Employee;
 use App\Models\Schedule;
 use App\Models\Subject;
 use App\Models\User;
@@ -37,7 +38,6 @@ class ScheduleController extends Controller
             ->get();
 
         $subjects = Subject::where('is_active', true)->orderBy('cluster')->orderBy('name')->get();
-        $teachers = User::role('guru')->with('subjects')->orderBy('name')->get();
 
         $selectedClassroomId = $request->input('classroom_id', $classrooms->first()?->id);
         $selectedDay = $request->input('day_of_week');
@@ -50,6 +50,22 @@ class ScheduleController extends Controller
             ->when($selectedDay, fn ($q) => $q->where('day_of_week', $selectedDay));
 
         $schedules = $query->orderBy('day_of_week')->orderBy('start_time')->get();
+        $scheduleSubjectIds = $schedules->pluck('subject_id')->filter()->unique();
+        $teachersBySubject = $scheduleSubjectIds->mapWithKeys(fn ($subjectId) => [$subjectId => collect()]);
+
+        $eligibleTeachers = User::role('guru')
+            ->whereHas('employee', fn ($employee) => $employee
+                ->where('is_teacher', true)
+                ->where('employment_status', Employee::STATUS_ACTIVE))
+            ->with(['subjects' => fn ($teacherSubjects) => $teacherSubjects->whereIn('subjects.id', $scheduleSubjectIds)])
+            ->orderBy('name')
+            ->get();
+
+        foreach ($eligibleTeachers as $teacher) {
+            foreach ($teacher->subjects as $subject) {
+                $teachersBySubject->get($subject->getKey())->push($teacher);
+            }
+        }
 
         // Rekapitulasi per hari (Senin - Jumat)
         $daySchedules = [
@@ -66,7 +82,7 @@ class ScheduleController extends Controller
         return view('admin.schedules.index', compact(
             'classrooms',
             'subjects',
-            'teachers',
+            'teachersBySubject',
             'schedules',
             'daySchedules',
             'selectedClassroomId',
@@ -131,6 +147,10 @@ class ScheduleController extends Controller
     public function getTeachersBySubject(Subject $subject): JsonResponse
     {
         $teachers = $subject->teachers()
+            ->role('guru')
+            ->whereHas('employee', fn ($employee) => $employee
+                ->where('is_teacher', true)
+                ->where('employment_status', Employee::STATUS_ACTIVE))
             ->select('users.id', 'users.name', 'users.email')
             ->get()
             ->map(function ($teacher) {

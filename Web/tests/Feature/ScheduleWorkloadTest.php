@@ -34,6 +34,7 @@ class ScheduleWorkloadTest extends TestCase
 
         $this->teacher = User::factory()->create(['name' => 'Budi Santoso']);
         $this->teacher->assignRole('guru');
+        $this->teacher->employee()->create();
 
         $this->mainSubject = Subject::create([
             'code' => 'MAT-W',
@@ -172,6 +173,7 @@ class ScheduleWorkloadTest extends TestCase
     {
         $otherTeacher = User::factory()->create(['name' => 'Guru Lain']);
         $otherTeacher->assignRole('guru');
+        $otherTeacher->employee()->create();
         $otherTeacher->subjects()->attach($this->mainSubject->id, ['is_primary' => true]);
 
         // Kelas A sudah ada jadwal pada Senin 07:15 - 08:45

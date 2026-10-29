@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AcademicYear;
 use App\Models\Classroom;
+use App\Models\Employee;
 use App\Models\Schedule;
 use App\Models\Subject;
 use App\Models\User;
@@ -35,6 +36,7 @@ class ScheduleWebTest extends TestCase
 
         $this->teacher = User::factory()->create(['name' => 'Hendra Kusuma']);
         $this->teacher->assignRole('guru');
+        $this->teacher->employee()->create();
 
         $this->subject = Subject::create([
             'code' => 'MAT-W',
@@ -141,6 +143,86 @@ class ScheduleWebTest extends TestCase
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $this->teacher->id)
             ->assertJsonPath('data.0.is_primary', true);
+    }
+
+    public function test_ajax_excludes_teachers_without_an_active_teaching_profile(): void
+    {
+        $teacherOnLeave = User::factory()->create();
+        $teacherOnLeave->assignRole('guru');
+        $teacherOnLeave->employee()->create(['employment_status' => Employee::STATUS_LEAVE]);
+        $teacherOnLeave->subjects()->attach($this->subject->id, ['is_primary' => false]);
+
+        $nonTeacher = User::factory()->create();
+        $nonTeacher->assignRole('guru');
+        $nonTeacher->employee()->create(['is_teacher' => false]);
+        $nonTeacher->subjects()->attach($this->subject->id, ['is_primary' => false]);
+
+        $teacherWithoutProfile = User::factory()->create();
+        $teacherWithoutProfile->assignRole('guru');
+        $teacherWithoutProfile->subjects()->attach($this->subject->id, ['is_primary' => false]);
+
+        $this->actingAs($this->admin)
+            ->getJson(route('admin.schedules.teachers-by-subject', $this->subject))
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $this->teacher->id);
+    }
+
+    public function test_schedule_edit_only_renders_teachers_linear_to_its_subject(): void
+    {
+        $otherSubject = Subject::create([
+            'code' => 'BIO',
+            'name' => 'Biologi',
+            'cluster' => 'mipa',
+            'color_code' => '#10B981',
+            'is_active' => true,
+        ]);
+        $nonLinearTeacher = User::factory()->create(['name' => 'Guru Tidak Linier']);
+        $nonLinearTeacher->assignRole('guru');
+        $nonLinearTeacher->employee()->create();
+        $nonLinearTeacher->subjects()->attach($otherSubject->id, ['is_primary' => true]);
+        $schedule = $this->makeSchedule($this->classroom, $this->subject, $this->teacher);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.schedules.index', ['classroom_id' => $this->classroom->id]))
+            ->assertOk()
+            ->assertSee("edit_teacher_id_{$schedule->id}", false)
+            ->assertSee('Hendra Kusuma')
+            ->assertDontSee('Guru Tidak Linier');
+    }
+
+    public function test_store_schedule_rejects_teacher_without_employee_profile(): void
+    {
+        $teacher = User::factory()->create();
+        $teacher->assignRole('guru');
+        $teacher->subjects()->attach($this->subject->id, ['is_primary' => true]);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.schedules.store'), $this->schedulePayload(['teacher_id' => $teacher->id]))
+            ->assertSessionHasErrors('teacher_id');
+    }
+
+    public function test_store_schedule_rejects_inactive_teacher(): void
+    {
+        $teacher = User::factory()->create();
+        $teacher->assignRole('guru');
+        $teacher->employee()->create(['employment_status' => Employee::STATUS_LEAVE]);
+        $teacher->subjects()->attach($this->subject->id, ['is_primary' => true]);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.schedules.store'), $this->schedulePayload(['teacher_id' => $teacher->id]))
+            ->assertSessionHasErrors('teacher_id');
+    }
+
+    public function test_store_schedule_rejects_teacher_without_subject_qualification(): void
+    {
+        $teacher = User::factory()->create();
+        $teacher->assignRole('guru');
+        $teacher->employee()->create();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.schedules.store'), $this->schedulePayload(['teacher_id' => $teacher->id]))
+            ->assertSessionHasErrors('teacher_id');
     }
 
     public function test_store_schedule_fails_when_clash_occurs(): void
@@ -257,5 +339,18 @@ class ScheduleWebTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors('classroom_id');
+    }
+
+    private function schedulePayload(array $overrides = []): array
+    {
+        return array_merge([
+            'classroom_id' => $this->classroom->id,
+            'subject_id' => $this->subject->id,
+            'teacher_id' => $this->teacher->id,
+            'day_of_week' => 2,
+            'start_time' => '10:00',
+            'end_time' => '11:30',
+            'is_active' => '1',
+        ], $overrides);
     }
 }
