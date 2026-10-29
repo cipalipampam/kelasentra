@@ -43,6 +43,15 @@ class AcademicApiTest extends TestCase
             ->assertJsonPath('data.schedules.0.id', $ownSchedule->id);
     }
 
+    public function test_schedule_index_rejects_saturday_filter(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson('/api/v1/schedules?day_of_week=6')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('day_of_week');
+    }
+
     public function test_assigned_teacher_can_prefill_and_upsert_class_attendance(): void
     {
         $classroom = $this->classroom();

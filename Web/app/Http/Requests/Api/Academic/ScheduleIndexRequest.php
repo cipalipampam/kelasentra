@@ -14,7 +14,7 @@ class ScheduleIndexRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'day_of_week' => ['nullable', 'integer', 'between:1,6'],
+            'day_of_week' => ['nullable', 'integer', 'between:1,5'],
         ];
     }
 }

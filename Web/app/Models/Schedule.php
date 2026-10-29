@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -123,6 +124,9 @@ class Schedule extends Model
 
     public function scopeOverlapping($query, int $dayOfWeek, string $startTime, string $endTime, ?int $ignoreId = null)
     {
+        $startTime = Carbon::parse($startTime)->format('H:i:s');
+        $endTime = Carbon::parse($endTime)->format('H:i:s');
+
         return $query->where('day_of_week', $dayOfWeek)
             ->where(function ($q) use ($startTime, $endTime) {
                 $q->where('start_time', '<', $endTime)

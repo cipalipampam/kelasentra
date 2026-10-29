@@ -252,6 +252,13 @@ class ScheduleWebTest extends TestCase
         $response->assertSessionHasErrors(['teacher_id']);
     }
 
+    public function test_adjacent_schedule_slots_do_not_overlap_with_hour_minute_input(): void
+    {
+        $this->makeSchedule($this->classroom, $this->subject, $this->teacher, 1, '07:00:00', '08:30:00');
+
+        $this->assertFalse(Schedule::query()->overlapping(1, '08:30', '10:00')->exists());
+    }
+
     public function test_store_schedule_fails_when_overlapping_break_time(): void
     {
         // Coba buat KBM jam 09:15 - 10:15 (menabrak Istirahat I 09:30 - 10:00)

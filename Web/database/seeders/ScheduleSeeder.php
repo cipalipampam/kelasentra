@@ -40,9 +40,9 @@ class ScheduleSeeder extends Seeder
     /** @var list<array{0: string, 1: string}> */
     private const BLOCKS = [
         ['07:00:00', '08:30:00'],
-        ['08:30:00', '10:00:00'],
-        ['10:15:00', '11:45:00'],
+        ['10:00:00', '11:30:00'],
         ['13:00:00', '14:30:00'],
+        ['14:30:00', '16:00:00'],
     ];
 
     /** @var array<string, string> ruang khusus tiap mapel */
