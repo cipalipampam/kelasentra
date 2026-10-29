@@ -20,7 +20,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     (day: 3, name: 'Rabu'),
     (day: 4, name: 'Kamis'),
     (day: 5, name: 'Jumat'),
-    (day: 6, name: 'Sabtu'),
   ];
 
   @override
@@ -31,7 +30,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
   }
 
-  Color _parseHexColor(String? hexString, {Color fallback = AppConstants.colorPrimaryBase}) {
+  Color _parseHexColor(
+    String? hexString, {
+    Color fallback = AppConstants.colorPrimaryBase,
+  }) {
     if (hexString == null || hexString.isEmpty) return fallback;
     try {
       final hex = hexString.replaceAll('#', '');
@@ -92,22 +94,30 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
-                            color: isSelected
-                                ? AppConstants.colorPrimaryBase
-                                : AppConstants.colorBackground,
+                            color:
+                                isSelected
+                                    ? AppConstants.colorPrimaryBase
+                                    : AppConstants.colorBackground,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: isSelected
-                                  ? AppConstants.colorPrimaryBase
-                                  : AppConstants.colorBorder,
+                              color:
+                                  isSelected
+                                      ? AppConstants.colorPrimaryBase
+                                      : AppConstants.colorBorder,
                             ),
                           ),
                           child: Text(
                             item.name,
                             style: TextStyle(
-                              color: isSelected ? Colors.white : AppConstants.colorTextSecondary,
+                              color:
+                                  isSelected
+                                      ? Colors.white
+                                      : AppConstants.colorTextSecondary,
                               fontSize: 13,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                              fontWeight:
+                                  isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
                             ),
                           ),
                         ),
@@ -148,7 +158,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.calendar_today_outlined, size: 48, color: AppConstants.colorTextMuted),
+              Icon(
+                Icons.calendar_today_outlined,
+                size: 48,
+                color: AppConstants.colorTextMuted,
+              ),
               const SizedBox(height: 12),
               Text(
                 provider.errorMessage!,
@@ -248,10 +262,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ── Colored Left Bar ───────────────────────────────────────────
-              Container(
-                width: 6,
-                color: accentColor,
-              ),
+              Container(width: 6, color: accentColor),
 
               // ── Card Details ───────────────────────────────────────────────
               Expanded(
@@ -266,7 +277,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         children: [
                           if (item.subject?.code.isNotEmpty == true)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: accentColor.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(6),
@@ -318,7 +332,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         children: [
                           // For student: show teacher; for teacher: show classroom
                           Icon(
-                            isTeacher ? Icons.groups_rounded : Icons.person_rounded,
+                            isTeacher
+                                ? Icons.groups_rounded
+                                : Icons.person_rounded,
                             size: 15,
                             color: AppConstants.colorTextSecondary,
                           ),
@@ -362,7 +378,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       // Teacher Action: Open Attendance Button
                       if (isTeacher) ...[
                         const SizedBox(height: 14),
-                        const Divider(height: 1, color: AppConstants.colorBorder),
+                        const Divider(
+                          height: 1,
+                          color: AppConstants.colorBorder,
+                        ),
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
@@ -370,7 +389,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             onPressed: () {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (_) => ClassAttendanceScreen(schedule: item),
+                                  builder:
+                                      (_) =>
+                                          ClassAttendanceScreen(schedule: item),
                                 ),
                               );
                             },
@@ -382,10 +403,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
-                            icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
+                            icon: const Icon(
+                              Icons.playlist_add_check_rounded,
+                              size: 18,
+                            ),
                             label: const Text(
                               'Buka Absensi Kelas',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
@@ -401,4 +428,3 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 }
-
