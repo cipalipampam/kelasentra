@@ -479,7 +479,7 @@ class ClassroomService
      * @param  int[]  $classroomIds  ID rombel yang dipilih dari TA sumber
      * @return array{created: int, skipped: int}
      */
-    public function duplicateClassroomsFromYear(array $classroomIds, int $targetAcademicYearId): array
+    public function duplicateClassroomsFromYear(array $classroomIds, int $targetAcademicYearId, ?int $sourceAcademicYearId = null): array
     {
         $targetYear = AcademicYear::findOrFail($targetAcademicYearId);
 
@@ -490,6 +490,15 @@ class ClassroomService
         }
 
         $sources = Classroom::whereIn('id', $classroomIds)->get();
+
+        if ($sourceAcademicYearId !== null) {
+            $hasForeignClassroom = $sources->contains(fn ($c) => (int) $c->academic_year_id !== $sourceAcademicYearId);
+            if ($hasForeignClassroom || $sources->count() !== count(array_unique($classroomIds))) {
+                throw ValidationException::withMessages([
+                    'classroom_ids' => 'Satu atau lebih rombel yang dipilih tidak berasal dari tahun ajaran sumber.',
+                ]);
+            }
+        }
 
         // Nama rombel yang sudah ada di tahun tujuan (untuk cek duplikat).
         $existingNames = Classroom::where('academic_year_id', $targetAcademicYearId)

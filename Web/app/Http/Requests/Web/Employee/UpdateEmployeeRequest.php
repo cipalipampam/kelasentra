@@ -16,8 +16,9 @@ class UpdateEmployeeRequest extends FormRequest
 
     public function rules()
     {
-        $userId = $this->route('employee');
-        $user = User::with('employee')->findOrFail($userId);
+        $employeeParam = $this->route('employee');
+        $userId = $employeeParam instanceof User ? $employeeParam->id : $employeeParam;
+        $user = User::role(['guru', 'staff'])->with('employee')->findOrFail($userId);
         $employeeId = $user->employee ? $user->employee->id : null;
 
         return [

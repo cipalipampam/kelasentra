@@ -5,20 +5,18 @@ namespace App\Http\Controllers\Web\Employee;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Web\Employee\StoreEmployeeRequest;
 use App\Http\Requests\Web\Employee\UpdateEmployeeRequest;
-use App\Models\User;
 use App\Models\Subject;
-use App\Services\Web\Employee\EmployeeService;
+use App\Models\User;
 use App\Services\Web\Academic\ScheduleService;
+use App\Services\Web\Employee\EmployeeService;
 use Illuminate\Http\Request;
 
 class EmployeeController extends Controller
 {
-
     public function __construct(
         protected EmployeeService $employeeService,
         protected ScheduleService $scheduleService
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -64,6 +62,8 @@ class EmployeeController extends Controller
 
     public function show(User $employee)
     {
+        $this->ensureEmployee($employee);
+
         $employee->load(['employee', 'roles', 'attendances', 'subjects']);
 
         $workload = null;
@@ -76,6 +76,8 @@ class EmployeeController extends Controller
 
     public function edit(User $employee)
     {
+        $this->ensureEmployee($employee);
+
         $employee->load(['employee', 'roles', 'subjects']);
         $subjects = Subject::where('is_active', true)->orderBy('cluster')->orderBy('name')->get()->groupBy('cluster');
 
@@ -84,6 +86,8 @@ class EmployeeController extends Controller
 
     public function update(UpdateEmployeeRequest $request, User $employee)
     {
+        $this->ensureEmployee($employee);
+
         $this->employeeService->updateEmployee($employee, $request->validated());
 
         return redirect()->route('admin.employees.index')->with('success', 'Data pegawai/guru berhasil diperbarui.');
@@ -91,8 +95,17 @@ class EmployeeController extends Controller
 
     public function destroy(User $employee)
     {
+        $this->ensureEmployee($employee);
+
         $this->employeeService->deleteEmployee($employee);
 
         return redirect()->route('admin.employees.index')->with('success', 'Data pegawai/guru berhasil dihapus.');
+    }
+
+    private function ensureEmployee(User $employee): void
+    {
+        if (! $employee->hasAnyRole(['guru', 'staff'])) {
+            abort(404);
+        }
     }
 }

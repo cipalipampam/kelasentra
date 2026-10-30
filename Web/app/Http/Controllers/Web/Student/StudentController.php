@@ -92,7 +92,7 @@ class StudentController extends Controller
 
     public function show($id)
     {
-        $student = User::with([
+        $student = User::role('siswa')->with([
             'student.currentEnrollment.classroom.homeroomTeacher',
             'student.latestEnrollment.classroom.homeroomTeacher',
             'student.entryAcademicYear',
@@ -103,7 +103,7 @@ class StudentController extends Controller
 
     public function edit($id)
     {
-        $student = User::with([
+        $student = User::role('siswa')->with([
             'student.currentEnrollment.classroom',
             'student.latestEnrollment.classroom',
         ])->findOrFail($id);
@@ -116,7 +116,7 @@ class StudentController extends Controller
 
     public function update(UpdateStudentRequest $request, $id)
     {
-        $user = User::findOrFail($id);
+        $user = $this->findStudentOrFail($id);
         $this->studentService->updateStudent($user, $request->validated());
 
         return redirect()->route('admin.students.index')->with('success', 'Student successfully updated');
@@ -124,9 +124,14 @@ class StudentController extends Controller
 
     public function destroy($id)
     {
-        $user = User::findOrFail($id);
+        $user = $this->findStudentOrFail($id);
         $this->studentService->deleteStudent($user);
 
         return redirect()->route('admin.students.index')->with('success', 'Student successfully deleted');
+    }
+
+    private function findStudentOrFail($id): User
+    {
+        return User::role('siswa')->findOrFail($id);
     }
 }

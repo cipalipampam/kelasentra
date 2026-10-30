@@ -17,7 +17,7 @@ class UpdateStudentRequest extends FormRequest
     public function rules()
     {
         $userId = $this->route('student');
-        $user = User::with('student')->findOrFail($userId);
+        $user = User::role('siswa')->with('student')->findOrFail($userId);
         $studentId = $user->student ? $user->student->id : null;
         $currentStatus = $user->student?->academic_status ?? 'active';
 

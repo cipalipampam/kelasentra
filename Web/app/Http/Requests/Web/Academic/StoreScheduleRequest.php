@@ -5,6 +5,7 @@ namespace App\Http\Requests\Web\Academic;
 use App\Models\Classroom;
 use App\Rules\EligibleTeachingTeacher;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreScheduleRequest extends FormRequest
 {
@@ -32,7 +33,10 @@ class StoreScheduleRequest extends FormRequest
                     }
                 },
             ],
-            'subject_id' => ['required', 'exists:subjects,id'],
+            'subject_id' => [
+                'required',
+                Rule::exists('subjects', 'id')->where(fn ($query) => $query->where('is_active', true)->whereNull('deleted_at')),
+            ],
             'teacher_id' => ['required', 'exists:users,id', new EligibleTeachingTeacher($this->integer('subject_id') ?: null)],
             'day_of_week' => ['required', 'integer', 'between:1,5'],
             'start_time' => ['required', 'date_format:H:i'],
@@ -47,6 +51,7 @@ class StoreScheduleRequest extends FormRequest
         return [
             'classroom_id.required' => 'Rombel kelas wajib dipilih.',
             'subject_id.required' => 'Mata pelajaran wajib dipilih.',
+            'subject_id.exists' => 'Mata pelajaran yang dipilih tidak aktif atau tidak ditemukan.',
             'teacher_id.required' => 'Guru pengampu wajib dipilih.',
             'day_of_week.between' => 'Hari KBM hanya berlaku untuk Senin sampai Jumat (Full Day School).',
             'start_time.required' => 'Jam mulai mengajar wajib diisi.',

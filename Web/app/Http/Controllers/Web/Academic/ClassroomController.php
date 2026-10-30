@@ -216,6 +216,7 @@ class ClassroomController extends Controller
         $result = $this->classroomService->duplicateClassroomsFromYear(
             $request->input('classroom_ids', []),
             (int) $request->input('target_academic_year_id'),
+            (int) $request->input('source_academic_year_id'),
         );
 
         $message = "{$result['created']} rombel berhasil diduplikasi ke tahun ajaran tujuan.";

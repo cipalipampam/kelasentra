@@ -211,6 +211,19 @@ class ScheduleService
         }
 
         // 4. Kelayakan guru: peran guru, tenaga pengajar aktif, dan linier mapel.
+        $subject = Subject::find($subjectId);
+        if (! $subject) {
+            throw ValidationException::withMessages([
+                'subject_id' => 'Data mata pelajaran tidak ditemukan.',
+            ]);
+        }
+
+        if (! $subject->is_active) {
+            throw ValidationException::withMessages([
+                'subject_id' => "Mata pelajaran {$subject->name} tidak aktif sehingga tidak dapat dijadwalkan.",
+            ]);
+        }
+
         $teacher = User::with(['employee', 'subjects'])->find($teacherId);
         if (! $teacher) {
             throw ValidationException::withMessages([
