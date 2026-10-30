@@ -21,8 +21,8 @@ return new class extends Migration
             $table->foreignId('promotion_batch_id')->nullable()->constrained('promotion_batches')->nullOnDelete();
             $table->timestamps();
 
-            // Satu siswa hanya boleh punya satu enrollment per tahun ajaran.
-            $table->unique(['student_id', 'academic_year_id'], 'student_enrollments_year_unique');
+            // Indeks penempatan siswa per tahun ajaran untuk pencarian riwayat
+            $table->index(['student_id', 'academic_year_id'], 'student_enrollments_student_year_index');
 
             $table->index('classroom_id');
         });

@@ -9,6 +9,7 @@ use App\Models\Subject;
 use App\Models\User;
 use App\Rules\EligibleTeachingTeacher;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ScheduleService
@@ -312,7 +313,44 @@ class ScheduleService
 
         $this->validateScheduleSlot($data, $schedule->getKey());
 
-        return $schedule->update($this->scheduleAttributes($data, $schedule));
+        $currentAssignment = $schedule->assignment;
+        $teacherChanged = $currentAssignment !== null && (int) $currentAssignment->teacher_id !== (int) $data['teacher_id'];
+
+        if ($teacherChanged) {
+            $academicYearId = $schedule->classroom?->academic_year_id;
+            // A-01: Pergantian guru pada rombel+mapel ini memengaruhi seluruh slot aktif lainnya.
+            // Pastikan guru pengganti tidak memiliki jadwal bentrok pada slot-slot lain tersebut.
+            $otherSchedules = Schedule::query()
+                ->where('teaching_assignment_id', $currentAssignment->getKey())
+                ->whereKeyNot($schedule->getKey())
+                ->where('is_active', true)
+                ->get();
+
+            foreach ($otherSchedules as $other) {
+                $clash = Schedule::query()
+                    ->where('is_active', true)
+                    ->whereHas('assignment', fn ($q) => $q->where('teacher_id', $data['teacher_id']))
+                    ->when($academicYearId !== null, fn ($query) => $query->whereHas(
+                        'assignment.classroom',
+                        fn ($clashClassroom) => $clashClassroom->where('academic_year_id', $academicYearId),
+                    ))
+                    ->overlapping($other->day_of_week, $other->start_time, $other->end_time)
+                    ->first();
+
+                if ($clash) {
+                    $clashClass = $clash->classroom?->name ?? 'Kelas lain';
+                    $clashRange = substr($clash->start_time, 0, 5).' - '.substr($clash->end_time, 0, 5);
+                    $dayName = ['1' => 'Senin', '2' => 'Selasa', '3' => 'Rabu', '4' => 'Kamis', '5' => 'Jumat'][$other->day_of_week] ?? "Hari {$other->day_of_week}";
+                    throw ValidationException::withMessages([
+                        'teacher_id' => "Pergantian guru memengaruhi seluruh slot mapel ini, namun Guru pengganti bentrok pada hari {$dayName} di {$clashClass} ({$clashRange}).",
+                    ]);
+                }
+            }
+        }
+
+        return DB::transaction(function () use ($schedule, $data) {
+            return $schedule->update($this->scheduleAttributes($data, $schedule));
+        });
     }
 
     /**

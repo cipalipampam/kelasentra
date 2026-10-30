@@ -3,6 +3,7 @@
 namespace App\Services\Web\Academic;
 
 use App\Models\Classroom;
+use App\Models\Schedule;
 use App\Models\Subject;
 use App\Models\TeachingAssignment;
 use App\Models\User;
@@ -43,6 +44,7 @@ class TeachingAssignmentService
                 return $active;
             }
 
+            $oldAssignmentId = $active?->getKey();
             $active?->delete();
 
             // Penugasan yang pernah ada untuk kombinasi ini dipakai ulang agar
@@ -55,15 +57,23 @@ class TeachingAssignmentService
 
             if ($restorable !== null) {
                 $restorable->restore();
-
-                return $restorable->refresh();
+                $newAssignment = $restorable->refresh();
+            } else {
+                $newAssignment = TeachingAssignment::create([
+                    'classroom_id' => $classroom->getKey(),
+                    'subject_id' => $subject->getKey(),
+                    'teacher_id' => $teacher->getKey(),
+                ]);
             }
 
-            return TeachingAssignment::create([
-                'classroom_id' => $classroom->getKey(),
-                'subject_id' => $subject->getKey(),
-                'teacher_id' => $teacher->getKey(),
-            ]);
+            if ($oldAssignmentId !== null) {
+                // A-01: Pindahkan seluruh slot jadwal aktif dari penugasan lama ke penugasan baru
+                // agar tidak ada slot yang menjadi orphan menunjuk assignment soft-deleted.
+                Schedule::where('teaching_assignment_id', $oldAssignmentId)
+                    ->update(['teaching_assignment_id' => $newAssignment->getKey()]);
+            }
+
+            return $newAssignment;
         });
     }
 }

@@ -614,13 +614,20 @@ class ClassroomService
                 foreach ($lockedBatch->items as $item) {
                     $student = $item->student;
 
-                    // Rombel asal sudah dihapus atau tidak aktif sehingga tidak dapat menerima siswa.
-                    $fromClassroom = $item->from_classroom_id ? Classroom::find($item->from_classroom_id) : null;
+                    // A-11: Rombel asal sudah dihapus, tidak aktif, atau tahun ajarannya sudah selesai (closed).
+                    $fromClassroom = $item->from_classroom_id
+                        ? Classroom::with('academicYear')->find($item->from_classroom_id)
+                        : null;
 
-                    if ($fromClassroom === null || ! $fromClassroom->is_active) {
+                    $yearOperable = $fromClassroom?->academicYear?->isOperable() ?? false;
+
+                    if ($fromClassroom === null || ! $fromClassroom->is_active || ! $yearOperable) {
+                        $note = ($fromClassroom === null || ! $fromClassroom->is_active)
+                            ? 'Rombel asal sudah dihapus atau tidak aktif.'
+                            : 'Tahun ajaran rombel asal sudah selesai (closed).';
                         $item->update([
                             'revert_status' => PromotionBatchItem::REVERT_STATUS_MISSING_CLASSROOM,
-                            'revert_note' => 'Rombel asal sudah dihapus atau tidak aktif.',
+                            'revert_note' => $note,
                         ]);
                         $missingClassroom++;
 

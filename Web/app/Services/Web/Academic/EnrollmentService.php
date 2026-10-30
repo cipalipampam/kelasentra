@@ -5,6 +5,7 @@ namespace App\Services\Web\Academic;
 use App\Models\Classroom;
 use App\Models\Student;
 use App\Models\StudentEnrollment;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -71,19 +72,12 @@ class EnrollmentService
                 return $current;
             }
 
-            $existingForYear = StudentEnrollment::query()
-                ->where('student_id', $student->getKey())
-                ->where('academic_year_id', $locked->academic_year_id)
-                ->first();
-
-            $occupant = $existingForYear ?? $current;
-
             // Kursi dihitung dari enrollment berjalan rombel tujuan, dan siswa
             // yang pindah dari rombel ini tidak menempati kursi tambahan.
             $occupied = StudentEnrollment::query()
                 ->where('classroom_id', $locked->getKey())
                 ->whereNull('ended_at')
-                ->when($occupant !== null, fn ($query) => $query->whereKeyNot($occupant->getKey()))
+                ->when($current !== null, fn ($query) => $query->whereKeyNot($current->getKey()))
                 ->count();
 
             if ($occupied >= $locked->maxStudents()) {
@@ -93,27 +87,30 @@ class EnrollmentService
             }
 
             if ($current !== null) {
-                $current->update(['ended_at' => $startDate]);
+                // A-06: Tutup enrollment berjalan tanpa tumpang tindih tanggal.
+                // Jika started_at sebelumnya sebelum startDate, akhiri sehari sebelum startDate.
+                // Jika started_at sama/lebih baru, samakan ended_at dengan started_at.
+                $currentStart = $current->started_at ? $current->started_at->toDateString() : $startDate;
+                $previousEndedAt = $currentStart < $startDate
+                    ? Carbon::parse($startDate)->subDay()->toDateString()
+                    : $currentStart;
+
+                $current->update(['ended_at' => $previousEndedAt]);
             }
 
-            if ($existingForYear !== null) {
-                $existingForYear->update([
-                    'classroom_id' => $locked->getKey(),
-                    'started_at' => $existingForYear->started_at ?? $startDate,
-                    'ended_at' => null,
-                    'promotion_batch_id' => $promotionBatchId,
-                ]);
-
-                return $existingForYear;
-            }
-
-            return StudentEnrollment::create([
+            // A-02: Selalu buat baris enrollment baru (append-only history)
+            // agar perpindahan rombel dalam tahun ajaran sama tidak menghapus histori lama.
+            $newEnrollment = StudentEnrollment::create([
                 'student_id' => $student->getKey(),
                 'academic_year_id' => $locked->academic_year_id,
                 'classroom_id' => $locked->getKey(),
                 'started_at' => $startDate,
                 'promotion_batch_id' => $promotionBatchId,
             ]);
+
+            $student->unsetRelation('currentEnrollment');
+
+            return $newEnrollment;
         });
     }
 
@@ -127,6 +124,13 @@ class EnrollmentService
         int $toClassroomId,
         int $batchId
     ): void {
+        $fromClassroom->loadMissing('academicYear');
+        if (! $fromClassroom->academicYear?->isOperable()) {
+            throw ValidationException::withMessages([
+                'academic_year' => "Tahun ajaran rombel {$fromClassroom->name} sudah selesai sehingga tidak dapat dibuka kembali.",
+            ]);
+        }
+
         // 1. Tutup enrollment berjalan di rombel tujuan (tetap mempertahankan promotion_batch_id)
         StudentEnrollment::query()
             ->where('student_id', $student->getKey())
@@ -163,6 +167,12 @@ class EnrollmentService
      */
     public function revertGraduation(Student $student, Classroom $fromClassroom): void
     {
+        $fromClassroom->loadMissing('academicYear');
+        if (! $fromClassroom->academicYear?->isOperable()) {
+            throw ValidationException::withMessages([
+                'academic_year' => "Tahun ajaran rombel {$fromClassroom->name} sudah selesai sehingga tidak dapat dibuka kembali.",
+            ]);
+        }
         $sourceEnrollment = StudentEnrollment::query()
             ->where('student_id', $student->getKey())
             ->where('classroom_id', $fromClassroom->getKey())
