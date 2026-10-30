@@ -1,13 +1,56 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 class AppConstants {
-  // Default LAN endpoint for local development on a physical device.
-  // Override BACKEND_HOST only when the laptop's network address changes.
+  // ponytail: dynamic remote-config discovery skipped; add when runtime multi-tenant URL switching required.
+
+  /// Explicit base URL override via `--dart-define=API_BASE_URL=https://.../api/v1`.
+  static const String _customBaseUrl = String.fromEnvironment('API_BASE_URL');
+
+  /// Hostname for backend API and Reverb server.
+  /// Debug defaults to local LAN IP for physical device testing.
+  /// Release defaults to production domain or explicit `--dart-define=BACKEND_HOST=...`.
   static const String backendHost = String.fromEnvironment(
     'BACKEND_HOST',
-    defaultValue: '192.168.0.104',
+    defaultValue: kReleaseMode ? 'api.kelasentra.sch.id' : '192.168.0.104',
   );
-  static const String baseUrl = 'http://$backendHost:8000/api/v1';
+
+  /// Whether transport uses HTTPS/WSS.
+  /// Automatically true in release mode; false in debug.
+  /// Override with `--dart-define=USE_HTTPS=true/false`.
+  static const bool useHttps = bool.fromEnvironment(
+    'USE_HTTPS',
+    defaultValue: kReleaseMode,
+  );
+
+  /// HTTP API port. Defaults to 443 in HTTPS/release mode, 8000 in debug.
+  static const int apiPort = int.fromEnvironment(
+    'API_PORT',
+    defaultValue: kReleaseMode ? (useHttps ? 443 : 80) : 8000,
+  );
+
+  /// Resolves the API base URL with fallback and environment parameter overrides.
+  static String resolveBaseUrl({
+    String? customBaseUrl,
+    bool? isHttps,
+    String? host,
+    int? port,
+    bool isRelease = kReleaseMode,
+  }) {
+    final override = customBaseUrl ?? _customBaseUrl;
+    if (override.isNotEmpty) {
+      return override;
+    }
+    final https = isHttps ?? (bool.hasEnvironment('USE_HTTPS') ? useHttps : isRelease);
+    final h = host ?? (bool.hasEnvironment('BACKEND_HOST') ? backendHost : (isRelease ? 'api.kelasentra.sch.id' : '192.168.0.104'));
+    final p = port ?? (bool.hasEnvironment('API_PORT') ? apiPort : (isRelease ? (https ? 443 : 80) : 8000));
+    final scheme = https ? 'https' : 'http';
+    final portSuffix = (https && p == 443) || (!https && p == 80) ? '' : ':$p';
+    return '$scheme://$h$portSuffix/api/v1';
+  }
+
+  /// Full base URL for API requests. Guaranteed HTTPS in release builds.
+  static String get baseUrl => resolveBaseUrl();
 
   /// Root URL (without /api/v1) — used for storage URLs and broadcasting auth.
   static String get rootUrl =>
@@ -21,8 +64,50 @@ class AppConstants {
     'REVERB_APP_KEY',
     defaultValue: 'local-key',
   );
-  static const String reverbHost = backendHost;
-  static const int reverbPort = 8080;
+
+  static const String reverbHost = String.fromEnvironment(
+    'REVERB_HOST',
+    defaultValue: backendHost,
+  );
+
+  /// Resolves WebSocket scheme. Defaults to `wss` in release / HTTPS mode, `ws` in debug.
+  static String resolveReverbScheme({
+    String? customScheme,
+    bool? isHttps,
+    bool isRelease = kReleaseMode,
+  }) {
+    if (customScheme != null && customScheme.isNotEmpty) {
+      return customScheme;
+    }
+    const envScheme = String.fromEnvironment('REVERB_SCHEME');
+    if (envScheme.isNotEmpty) {
+      return envScheme;
+    }
+    final https = isHttps ?? (bool.hasEnvironment('USE_HTTPS') ? useHttps : isRelease);
+    return https ? 'wss' : 'ws';
+  }
+
+  /// Active WebSocket scheme (`wss` in release, `ws` in debug).
+  static String get reverbScheme => resolveReverbScheme();
+
+  /// Resolves WebSocket port. Defaults to 443 in release / HTTPS mode, 8080 in debug.
+  static int resolveReverbPort({
+    int? customPort,
+    bool? isHttps,
+    bool isRelease = kReleaseMode,
+  }) {
+    if (customPort != null) {
+      return customPort;
+    }
+    if (bool.hasEnvironment('REVERB_PORT')) {
+      return const int.fromEnvironment('REVERB_PORT');
+    }
+    final https = isHttps ?? (bool.hasEnvironment('USE_HTTPS') ? useHttps : isRelease);
+    return https ? 443 : 8080;
+  }
+
+  /// Active WebSocket port (443 in release, 8080 in debug).
+  static int get reverbPort => resolveReverbPort();
 
   // SharedPreferences keys
   static const String tokenKey = 'AUTH_TOKEN_KEY';

@@ -84,7 +84,7 @@ class WebSocketService with WidgetsBindingObserver {
       }
 
       final hostOptions = PusherChannelsOptions.fromHost(
-        scheme: 'ws',
+        scheme: AppConstants.reverbScheme,
         host: AppConstants.reverbHost,
         port: AppConstants.reverbPort,
         key: AppConstants.reverbKey,
@@ -164,7 +164,7 @@ class WebSocketService with WidgetsBindingObserver {
     // Fix #5: Auth endpoint should be /broadcasting/auth (Laravel default),
     // NOT /api/broadcasting/auth (which doesn't exist).
     // The baseUrl includes /api/v1 so we build the auth URL explicitly from root.
-    final rootUrl = AppConstants.baseUrl.replaceFirst(RegExp(r'/api/v1$'), '');
+    final rootUrl = AppConstants.rootUrl;
 
     final channel = _client!.privateChannel(
       channelName,
